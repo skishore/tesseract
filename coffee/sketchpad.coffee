@@ -1,10 +1,9 @@
 class @Sketchpad extends Canvas
   constructor: (@elt, @mouse) ->
+    # Account for 1px borders.
+    @elt.height @elt.parent().outerHeight() - 2
+    @elt.width @elt.parent().outerWidth() - 2
     super @elt
-    @context.canvas.height = do @elt.height
-    @context.canvas.width = do @elt.width
-    do @set_line_style
-    # Set mouse event handlers based on the type of mouse interaction.
     @elt.bind @mouse.down_handler, @mousedown
     @elt.bind @mouse.move_handler, @mousemove
 

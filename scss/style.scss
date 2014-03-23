@@ -1,9 +1,23 @@
-.sketchpad-container {
+.sketchpad-outer-wrapper {
   text-align: center;
 
-  .sketchpad {
-    border: 1px dotted black;
-    height: 400px;
-    width: 400px;
+  .sketchpad-inner-wrapper {
+    display: inline-block;
+    height: 0px;
+    padding-bottom: 30%;
+    width: 30%;
+
+    .sketchpad {
+      border: 1px dotted black;
+    }
+  }
+}
+
+@media only screen and (max-device-width: 480px) {
+  .sketchpad-outer-wrapper {
+    .sketchpad-inner-wrapper {
+      padding-bottom: 90%;
+      width: 90%;
+    }
   }
 }

@@ -1,6 +1,9 @@
 class @Canvas
   constructor: (@elt) ->
     @context = elt[0].getContext '2d'
+    @context.canvas.height = do @elt.height
+    @context.canvas.width = do @elt.width
+    do @set_line_style
 
   set_line_style: =>
     @context.lineCap = 'round'
