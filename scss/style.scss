@@ -1,37 +1,59 @@
-.sketchpad-outer-wrapper {
+@mixin fill-parent {
+  position: absolute;
+
   bottom: 0px;
   left: 0px;
-  margin: 2%;
-  position: absolute;
   right: 0px;
-  text-align: center;
   top: 0px;
+}
 
-  .sketchpad-inner-wrapper {
-    display: inline-block;
-    height: 0px;
-    padding-bottom: 30%;
-    width: 30%;
+body {
+  margin: 2%;
+  text-align: center;
 
-    .sketchpad {
-      border: 1px dotted black;
+  .wrapper {
+    background-color: #CEF;
+    display: block;
+    line-height: 1em;
+    margin: 0 auto;
+    position: relative;
+    width: 20%;
+
+    :first-child {
+      @include fill-parent;
+      font-size: 20px;
+      overflow: hidden;
+      vertical-align: middle;
     }
+
+    &:after {
+      content: '';
+      display: block;
+      padding-top: 25%;
+    }
+  }
+
+  .square.wrapper {
+    background-color: #FCC;
+
+    &:after {
+      padding-top: 100%;
+    }
+  }
+
+  .buffer {
+    display: none;
+    height: 256px;
+    width: 256px;
   }
 }
 
-.buffer {
-  display: none;
-  height: 256px;
-  width: 256px;
-}
-
 @media only screen and (max-device-width: 480px) {
-  .sketchpad-outer-wrapper {
-    margin: 5%;
+  body {
+    margin: 4% 0%;
 
-    .sketchpad-inner-wrapper {
-      padding-bottom: 90%;
-      width: 90%;
+    .wrapper {
+      width: 100%;
     }
   }
 }

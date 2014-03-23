@@ -1,11 +1,11 @@
 class @Sketchpad extends Canvas
   constructor: (@elt, @mouse) ->
-    # Account for 1px borders.
-    @elt.height @elt.parent().outerHeight() - 2
-    @elt.width @elt.parent().outerWidth() - 2
+    @elt.height do @elt.parent().outerHeight
+    @elt.width do @elt.parent().outerWidth
     super @elt
     $(document).bind @mouse.down_handler, @mousedown
     $(document).bind @mouse.move_handler, @mousemove
+    $(document).bind @mouse.up_handler, @mouseup
 
   get_cursor: (e) =>
     offset = do @elt.offset
@@ -22,3 +22,6 @@ class @Sketchpad extends Canvas
       if @mouse.mouse_down or @mouse.touch_enabled
         @draw_line last_cursor, @cursor
     do e.stopPropagation
+
+  mouseup: (e) =>
+    do @changed
