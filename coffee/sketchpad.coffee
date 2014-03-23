@@ -12,9 +12,6 @@ class @Sketchpad extends Canvas
     x: 1.0*(e.pageX - offset.left)*@context.canvas.width/do @elt.width
     y: 1.0*(e.pageY - offset.top)*@context.canvas.height/do @elt.height
 
-  get_base64_image: =>
-    do @context.canvas.toDataURL
-
   mousedown: (e) =>
     @cursor = @get_cursor e.originalEvent
     do e.preventDefault
