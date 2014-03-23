@@ -4,8 +4,8 @@ class @Sketchpad extends Canvas
     @elt.height @elt.parent().outerHeight() - 2
     @elt.width @elt.parent().outerWidth() - 2
     super @elt
-    @elt.bind @mouse.down_handler, @mousedown
-    @elt.bind @mouse.move_handler, @mousemove
+    $('body').bind @mouse.down_handler, @mousedown
+    $('body').bind @mouse.move_handler, @mousemove
 
   get_cursor: (e) =>
     offset = do @elt.offset
@@ -14,8 +14,11 @@ class @Sketchpad extends Canvas
 
   mousedown: (e) =>
     @cursor = @get_cursor e.originalEvent
+    do e.preventDefault
 
   mousemove: (e) =>
     [last_cursor, @cursor] = [@cursor, @get_cursor e.originalEvent]
-    if @mouse.mouse_down or @mouse.touch_enabled
-      @draw_line last_cursor, @cursor
+    if last_cursor and @cursor
+      if @mouse.mouse_down or @mouse.touch_enabled
+        @draw_line last_cursor, @cursor
+    do e.preventDefault

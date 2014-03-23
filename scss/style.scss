@@ -1,5 +1,11 @@
 .sketchpad-outer-wrapper {
+  bottom: 0px;
+  left: 0px;
+  margin: 2%;
+  position: absolute;
+  right: 0px;
   text-align: center;
+  top: 0px;
 
   .sketchpad-inner-wrapper {
     display: inline-block;
@@ -15,6 +21,8 @@
 
 @media only screen and (max-device-width: 480px) {
   .sketchpad-outer-wrapper {
+    margin: 5%;
+
     .sketchpad-inner-wrapper {
       padding-bottom: 90%;
       width: 90%;
