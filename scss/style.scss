@@ -1,10 +1,10 @@
 @mixin fill-parent {
   position: absolute;
 
-  bottom: 0px;
-  left: 0px;
-  right: 0px;
-  top: 0px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
 }
 
 body {
@@ -14,14 +14,14 @@ body {
   .wrapper {
     background-color: #CEF;
     display: block;
-    line-height: 1em;
     margin: 0 auto;
     position: relative;
     width: 20%;
 
     :first-child {
       @include fill-parent;
-      font-size: 20px;
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 2em;
       overflow: hidden;
       vertical-align: middle;
     }
