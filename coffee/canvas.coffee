@@ -4,6 +4,7 @@ class @Canvas
     @context.canvas.height = do @elt.height
     @context.canvas.width = do @elt.width
     do @set_line_style
+    do @clear
 
   set_line_style: =>
     @context.lineCap = 'round'
@@ -12,7 +13,8 @@ class @Canvas
     @context.strokeStyle = 'black'
 
   clear: =>
-    @context.clearRect 0, 0, @context.canvas.width, @context.canvas.height
+    @context.fillStyle = 'white'
+    @context.fillRect 0, 0, @context.canvas.width, @context.canvas.height
 
   draw_line: (start, end) =>
     do @context.beginPath
