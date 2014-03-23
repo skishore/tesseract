@@ -1,8 +1,11 @@
-import base64
+#!/usr/bin/env python
 import os
-import string
+from subprocess import (
+  CalledProcessError,
+  PIPE,
+  Popen,
+)
 
-import tesseract
 from tornado.ioloop import IOLoop
 from tornado.options import (
   define,
@@ -16,13 +19,18 @@ from tornado.web import (
 )
 
 
-def ocr(image):
-  api = tesseract.TessBaseAPI()
-  api.Init('.', 'eng', tesseract.OEM_DEFAULT)
-  api.SetVariable('tessedit_char_whitelist', string.digits + string.letters)
-  api.SetPageSegMode(tesseract.PSM_SINGLE_CHAR)
-  tesseract.ProcessPagesBuffer(image, len(image), api)
-  return api.GetUTF8Text()[:1]
+def ocr(base64_image):
+  # Call out to a subprocess, because calling tesseract runs a distinct
+  # risk of segfaulting, and we don't want to take out the server.
+  subprocess = Popen(['./ocr.py'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+  (stdout, stderr) = subprocess.communicate(base64_image + '\n')
+  assert(subprocess.returncode is not None)
+  if subprocess.returncode:
+    raise CalledProcessError(
+      "Command './ocr.py' return non-zero exit status %s" %
+      (subprocess.returncode,)
+    )
+  return stdout[:-1]
 
 
 class DebugHandler(StaticFileHandler):
@@ -41,14 +49,10 @@ class IndexHandler(RequestHandler):
 class OCRHandler(RequestHandler):
   def post(self):
     base64_image = self.get_argument("base64_image", default=None, strip=False)
-    prefix = 'data:image/png;base64,'
-    if not base64_image.startswith(prefix):
-      raise ValueError('Unexpected prefix: %s' % (base64_image[:len(prefix)],))
-    image = base64.b64decode(base64_image[len(prefix):])
-    self.write({'result': ocr(image)})
+    self.write({'result': ocr(base64_image)})
 
 
-def main():
+if __name__ == '__main__':
   define('port', default=8000, help='Port to listen on', type=int)
   define('debug', default=False, help='Run in debug mode', type=bool)
   parse_command_line()
@@ -67,7 +71,3 @@ def main():
   )
   app.listen(options.port)
   IOLoop.instance().start()
-
-
-if __name__ == '__main__':
-  main()
