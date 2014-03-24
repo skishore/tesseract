@@ -6,9 +6,10 @@ fix_line_height = (elt) ->
 
 window.onload = ->
   ocr_result = $('.ocr-result')
-  controls = $('.controls')
-  for elt in [do ocr_result.parent, controls]
-    fix_line_height elt
+  reset = $('.reset')
+  skip = $('.skip')
+  for elt in [ocr_result, reset, skip]
+    fix_line_height do elt.parent
 
   mouse = new Mouse
   sketchpad = new Sketchpad $('.sketchpad'), mouse
@@ -19,5 +20,9 @@ window.onload = ->
     buffer.fill 'white'
     buffer.copy_from sketchpad
     base64_image = do buffer.get_base64_image
-    $.post '/ocr', base64_image: base64_image, (data) ->
+    $.post '/ocr', base64_image: base64_image, (data) =>
       ocr_result.text data.result
+
+  reset.click =>
+    do sketchpad.clear
+    ocr_result.text ''
