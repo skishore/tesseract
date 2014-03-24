@@ -1,4 +1,5 @@
 .sass-cache
+*.pyc
 *.swp
 static/css/*
 static/javascript/*

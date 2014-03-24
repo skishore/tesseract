@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import os
 from subprocess import (
-  CalledProcessError,
   PIPE,
   Popen,
 )
@@ -22,15 +21,16 @@ from tornado.web import (
 def ocr(base64_image):
   # Call out to a subprocess, because calling tesseract runs a distinct
   # risk of segfaulting, and we don't want to take out the server.
+  # Return the detected Unicode character, or None.
   subprocess = Popen(['./ocr.py'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
   (stdout, stderr) = subprocess.communicate(base64_image + '\n')
   assert(subprocess.returncode is not None)
   if subprocess.returncode:
-    raise CalledProcessError(
+    raise RuntimeError(
       "Command './ocr.py' return non-zero exit status %s" %
       (subprocess.returncode,)
     )
-  return stdout[:-1]
+  return unichr(int(stdout[:-1])) if stdout else None
 
 
 class DebugHandler(StaticFileHandler):
@@ -49,7 +49,11 @@ class IndexHandler(RequestHandler):
 class OCRHandler(RequestHandler):
   def post(self):
     base64_image = self.get_argument("base64_image", default=None, strip=False)
-    self.write({'result': ocr(base64_image)})
+    result = ocr(base64_image)
+    self.write({
+      'success': bool(result),
+      'unichr': ord(result) if result else None,
+    })
 
 
 if __name__ == '__main__':

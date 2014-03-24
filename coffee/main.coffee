@@ -40,7 +40,7 @@ window.onload = ->
       # Check that we're still on the given version before updating the UI.
       if sketchpad.last_version == version
         ocr_parent.stop().animate backgroundColor: '#EEE', DELAY
-        ocr_result.text data.result
+        ocr_result.text if data.success then data.unichr else '?'
 
   clear = =>
     do sketchpad.clear
