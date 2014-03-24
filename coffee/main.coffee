@@ -16,13 +16,18 @@ window.onload = ->
 
   buffer = new Canvas $('.buffer')
 
-  sketchpad.changed = =>
+  sketchpad.changed = (version) =>
+    ocr_result.text '-'
     buffer.fill 'white'
     buffer.copy_from sketchpad
     base64_image = do buffer.get_base64_image
     $.post '/ocr', base64_image: base64_image, (data) =>
-      ocr_result.text data.result
+      # Check that we're still on the given version before updating the UI.
+      if sketchpad.last_version == version
+        ocr_result.text data.result
 
   reset.click =>
     do sketchpad.clear
+    # HACK: Suppress sketchpad.changed and manually clear ocr_result.
+    sketchpad.last_version = sketchpad.version
     ocr_result.text ''
