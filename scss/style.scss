@@ -57,19 +57,20 @@ body {
   .inner.controls {
     line-height: 1.8em;
 
-    .reset, .next {
+    .reset, .prev, .next {
       cursor: pointer;
       float: left;
       user-select: none;
-      width: 50%;
     }
 
     .reset {
       background-color: #FCC;
+      width: 34%;
     }
 
-    .next {
+    .prev, .next {
       background-color: #CEF;
+      width: 33%;
     }
   }
 

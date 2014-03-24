@@ -26,11 +26,12 @@ window.onload = ->
   ocr_result = $('.ocr-result')
   hint = $('.hint')
   reset = $('.reset')
+  prev = $('.prev')
   next = $('.next')
 
   # Fix the height on the containers of all the variable divs.
   ocr_parent = do ocr_result.parent
-  controls = do reset.parent  # Same as next.parent.
+  controls = do reset.parent  # Same as prev.parent and next.parent.
   for elt in [ocr_parent, controls, hint]
     fix_line_height elt
 
@@ -62,6 +63,10 @@ window.onload = ->
         ocr_result.text ''
 
   reset.click clear
+
+  prev.click =>
+    render_unichr (get_next_letter -1), hint
+    do clear
 
   next.click =>
     render_unichr (get_next_letter 1), hint

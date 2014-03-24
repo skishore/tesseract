@@ -9,7 +9,7 @@ class @Canvas
   set_line_style: =>
     @context.lineCap = 'round'
     @context.lineJoin = 'round'
-    @context.lineWidth = Math.ceil 0.04*@context.canvas.width
+    @context.lineWidth = Math.ceil 0.024*@context.canvas.width
     @context.strokeStyle = 'black'
 
   clear: =>
