@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import json
 import os
 from subprocess import (
   PIPE,
@@ -50,6 +51,15 @@ class IndexHandler(RequestHandler):
     self.render('index.html')
 
 
+class LanguagesHandler(RequestHandler):
+  def get(self):
+    self.set_header('Content-Type', 'text/javascript')
+    self.write('LANGUAGE_DATA = %s;' % (json.dumps({
+      code: language.to_json()
+      for (code, language) in languages.REGISTRY.iteritems()
+    }),))
+
+
 class OCRHandler(RequestHandler):
   def post(self):
     language = self.get_argument('language', default=None, strip=False)
@@ -68,6 +78,7 @@ if __name__ == '__main__':
   # Set up the routing table.
   routing = [
     (r'/', IndexHandler),
+    (r'/language_data.js', LanguagesHandler),
     (r'/ocr', OCRHandler),
   ]
   static_handler_class = DebugHandler if options.debug else StaticFileHandler

@@ -1,5 +1,9 @@
 DELAY = 200
+
 LANGUAGE = 'kan'
+
+ALPHABET = LANGUAGE_DATA[LANGUAGE].alphabet_indices
+index = -1
 
 
 fix_line_height = (elt) ->
@@ -8,8 +12,10 @@ fix_line_height = (elt) ->
   elt.css 'font-size', (Math.floor font_size*elt.height()/line_height) + 'px'
 
 
-get_next_letter = ->
-  ALPHABET[Math.floor Math.random()*ALPHABET.length]
+get_next_letter = (offset) ->
+  #index = ALPHABET[Math.floor Math.random()*ALPHABET.length]
+  index = (index + offset + ALPHABET.length) % ALPHABET.length
+  ALPHABET[index]
 
 
 render_unichr = (unichr, elt) ->
@@ -29,7 +35,7 @@ window.onload = ->
     fix_line_height elt
 
   # Put up a random hint. We rolled a die to get this one.
-  hint.text 'A'
+  render_unichr (get_next_letter 1), hint
 
   mouse = new Mouse
   sketchpad = new Sketchpad $('.sketchpad'), mouse
@@ -58,5 +64,5 @@ window.onload = ->
   reset.click clear
 
   next.click =>
-    hint.text do get_next_letter
+    render_unichr (get_next_letter 1), hint
     do clear

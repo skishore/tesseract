@@ -8,6 +8,13 @@ class Language(object):
   code = None
   alphabet = None
 
+  @classmethod
+  def to_json(cls):
+    return {
+      'code': cls.code,
+      'alphabet_indices': sorted(map(ord, cls.alphabet)),
+    }
+
 
 class English(Language):
   code = 'eng'
