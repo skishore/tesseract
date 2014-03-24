@@ -6,6 +6,11 @@ import sys
 import tesseract
 
 
+# Uncomment these to use the English alphabet.
+LANGUAGE = 'eng'
+ALPHABET = string.letters[26:]
+
+
 def decode_image(base64_image):
   prefix = 'data:image/png;base64,'
   if not base64_image.startswith(prefix):
@@ -15,12 +20,12 @@ def decode_image(base64_image):
 
 def ocr(image):
   api = tesseract.TessBaseAPI()
-  api.Init('.', 'eng', tesseract.OEM_DEFAULT)
-  api.SetVariable('tessedit_char_whitelist', string.letters[26:])
+  api.Init('.', LANGUAGE, tesseract.OEM_DEFAULT)
+  api.SetVariable('tessedit_char_whitelist', ALPHABET)
   api.SetPageSegMode(tesseract.PSM_SINGLE_CHAR)
   tesseract.ProcessPagesBuffer(image, len(image), api)
   result = api.GetUTF8Text()[:1]
-  return '?' if result == ' ' else result
+  return result if result in ALPHABET else '?'
 
 
 if __name__ == '__main__':
