@@ -1,5 +1,5 @@
 DELAY = 200
-ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+LANGUAGE = 'kan'
 
 
 fix_line_height = (elt) ->
@@ -8,8 +8,12 @@ fix_line_height = (elt) ->
   elt.css 'font-size', (Math.floor font_size*elt.height()/line_height) + 'px'
 
 
-get_random_letter = ->
+get_next_letter = ->
   ALPHABET[Math.floor Math.random()*ALPHABET.length]
+
+
+render_unichr = (unichr, elt) ->
+  elt.html if unichr then "&##{parseInt unichr};" else '?'
 
 
 window.onload = ->
@@ -36,11 +40,11 @@ window.onload = ->
     buffer.fill 'white'
     buffer.copy_from sketchpad
     base64_image = do buffer.get_base64_image
-    $.post '/ocr', base64_image: base64_image, (data) =>
+    $.post '/ocr', language: LANGUAGE, base64_image: base64_image, (data) =>
       # Check that we're still on the given version before updating the UI.
       if sketchpad.last_version == version
         ocr_parent.stop().animate backgroundColor: '#EEE', DELAY
-        ocr_result.text if data.success then data.unichr else '?'
+        render_unichr data.unichr, ocr_result
 
   clear = =>
     do sketchpad.clear
@@ -54,5 +58,5 @@ window.onload = ->
   reset.click clear
 
   next.click =>
-    hint.text do get_random_letter
+    hint.text do get_next_letter
     do clear

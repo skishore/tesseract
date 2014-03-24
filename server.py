@@ -17,12 +17,16 @@ from tornado.web import (
   StaticFileHandler,
 )
 
+import languages
 
-def ocr(base64_image):
+
+def ocr(language, base64_image):
   # Call out to a subprocess, because calling tesseract runs a distinct
   # risk of segfaulting, and we don't want to take out the server.
   # Return the detected Unicode character, or None.
-  subprocess = Popen(['./ocr.py'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+  if language not in languages.REGISTRY:
+    raise ValueError('Unexpected language: %s' % (language,))
+  subprocess = Popen(['./ocr.py', language], stdin=PIPE, stdout=PIPE, stderr=PIPE)
   (stdout, stderr) = subprocess.communicate(base64_image + '\n')
   assert(subprocess.returncode is not None)
   if subprocess.returncode:
@@ -48,8 +52,9 @@ class IndexHandler(RequestHandler):
 
 class OCRHandler(RequestHandler):
   def post(self):
-    base64_image = self.get_argument("base64_image", default=None, strip=False)
-    result = ocr(base64_image)
+    language = self.get_argument('language', default=None, strip=False)
+    base64_image = self.get_argument('base64_image', default=None, strip=False)
+    result = ocr(language, base64_image)
     self.write({
       'success': bool(result),
       'unichr': ord(result) if result else None,

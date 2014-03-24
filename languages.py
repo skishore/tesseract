@@ -29,3 +29,9 @@ class Kannada(Language):
   consonants = u''.join(map(unichr, sorted(consonant_indices)))
 
   alphabet = vowels + consonants
+
+
+REGISTRY = {
+  'eng': English,
+  'kan': Kannada,
+}
