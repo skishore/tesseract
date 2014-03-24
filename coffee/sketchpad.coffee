@@ -20,7 +20,6 @@ class @Sketchpad extends Canvas
 
   mousedown: (e) =>
     @cursor = @get_cursor e.originalEvent
-    do e.preventDefault
 
   mousemove: (e) =>
     [last_cursor, @cursor] = [@cursor, @get_cursor e.originalEvent]
