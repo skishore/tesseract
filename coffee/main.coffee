@@ -1,11 +1,13 @@
 fix_line_height = (elt) ->
-  elt.css 'font-size', (Math.floor elt.height()/2) + 'px'
+  font_size = parseInt elt.css 'font-size'
+  line_height = parseInt elt.css 'line-height'
+  elt.css 'font-size', (Math.floor font_size*elt.height()/line_height) + 'px'
 
 
 window.onload = ->
   ocr_result = $('.ocr-result')
   controls = $('.controls')
-  for elt in [ocr_result, controls]
+  for elt in [do ocr_result.parent, controls]
     fix_line_height elt
 
   mouse = new Mouse

@@ -19,7 +19,8 @@ def ocr(image):
   api.SetVariable('tessedit_char_whitelist', string.letters[26:])
   api.SetPageSegMode(tesseract.PSM_SINGLE_CHAR)
   tesseract.ProcessPagesBuffer(image, len(image), api)
-  return api.GetUTF8Text()[:1]
+  result = api.GetUTF8Text()[:1]
+  return '?' if result == ' ' else result
 
 
 if __name__ == '__main__':
