@@ -9,14 +9,18 @@ fix_line_height = (elt) ->
 
 window.onload = ->
   ocr_result = $('.ocr-result')
+  hint = $('.hint')
   reset = $('.reset')
   skip = $('.skip')
 
   # Fix the height on the containers of all the variable divs.
   ocr_parent = do ocr_result.parent
   controls = do reset.parent  # Same as do skip.parent.
-  for elt in [ocr_parent, controls]
+  for elt in [ocr_parent, controls, hint]
     fix_line_height elt
+
+  # Put up a random hint. We rolled a die to get this one.
+  hint.text 'A'
 
   mouse = new Mouse
   sketchpad = new Sketchpad $('.sketchpad'), mouse

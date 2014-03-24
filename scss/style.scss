@@ -35,6 +35,15 @@ body {
 
   .square.wrapper {
     background-color: white;
+    z-index: -2;
+
+    .hint {
+      color: #DDD;
+      @include fill-parent;
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.2em;
+      z-index: -1;
+    }
 
     &:after {
       padding-top: 100%;
