@@ -40,15 +40,12 @@ window.onload = ->
 
   mouse = new Mouse
   sketchpad = new Sketchpad $('.sketchpad'), mouse
-  buffer = new FeatureCanvas $('.buffer')
-
-  $(document).keydown (e) =>
-    if e.keyCode == 13
-      buffer.fill 'white'
-      buffer.copy_from sketchpad
-      do buffer.run
+  feature = new Feature $('.feature'), sketchpad
+  do feature.run
 
   sketchpad.changed = (version) =>
+    if mouse.touch_enabled or true
+      do feature.run
     return
     ocr_parent.stop().animate backgroundColor: '#CCC', DELAY
     buffer.fill 'white'
@@ -68,6 +65,7 @@ window.onload = ->
       if sketchpad.last_version == version
         ocr_parent.stop().animate backgroundColor: '#EEE', DELAY
         ocr_result.text ''
+    do feature.run
 
   reset.click clear
 

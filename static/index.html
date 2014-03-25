@@ -10,19 +10,20 @@
 
     <script type="text/javascript" src="/language_data.js"></script>
     <script type="text/javascript" src="/static/javascript/canvas.js"></script>
-    <script type="text/javascript" src="/static/javascript/feature_canvas.js"></script>
+    <script type="text/javascript" src="/static/javascript/feature.js"></script>
     <script type="text/javascript" src="/static/javascript/mouse.js"></script>
     <script type="text/javascript" src="/static/javascript/sketchpad.js"></script>
     <script type="text/javascript" src="/static/javascript/main.js"></script>
   </head>
 
   <body>
-    <div class="wrapper">
+    <div class="wrapper" style="display: none;">
       <div class="inner ocr-result-container">
         <div>OCR result:</div>
         <div class="ocr-result"></div>
       </div>
     </div>
+    <canvas class="feature"></canvas>
     <div class="square wrapper">
       <div class="inner sketchpad-container">
         <canvas class="sketchpad"></canvas>

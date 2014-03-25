@@ -1,10 +1,9 @@
-class @FeatureCanvas extends Canvas
+class @Feature extends Canvas
   gauss3: [
     1, 2, 1,
     2, 4, 2,
     1, 2, 1,
   ]
-
   gauss5: [
      2,   7,  12,   7,  2,
      7,  31,  52,  31,  7,
@@ -13,15 +12,11 @@ class @FeatureCanvas extends Canvas
      2,   7,  12,   7,  2,
   ]
 
-  constructor: (elt) ->
+  constructor: (elt, @other) ->
     super elt
-    @fill 'white'
     elt.height 2*do elt.height
     elt.width 2*do elt.width
-
-  copy_from: (other) =>
-    @fill 'white'
-    super other
+    do @run
 
   get_pixel: (pixels, x, y) ->
     offset = 4*(x + pixels.width*y)
@@ -66,22 +61,21 @@ class @FeatureCanvas extends Canvas
     weights = (weight/sum for weight in weights)
     @convolve pixels, weights, offset
 
-  get_gradient: (offset) =>
-    pixels = do @get_pixels
+  get_gradient: (pixels, offset) =>
     [
       (@convolve pixels, [-1, 0, 1, -2, 0, 2, -1, 0, 1], offset),
       (@convolve pixels, [-1, -2, -1, 0, 0, 0, 1, 2, 1], offset),
     ]
 
-  sobel: =>
-    [gradx, grady] = @get_gradient 128
+  sobel: (pixels) =>
+    [gradx, grady] = @get_gradient pixels, 128
     for i in [0...gradx.data.length] by 4
       gradx.data[i + 1] = grady.data[i]
       gradx.data[i + 2] = (gradx.data[i] + grady.data[i])/4
     gradx
 
-  corner: =>
-    [gradx, grady] = do @get_gradient
+  corner: (pixels) =>
+    [gradx, grady] = @get_gradient pixels
     psd = new Array gradx.data.length
     for i in [0...gradx.data.length] by 4
       [ix, iy] = [gradx.data[i]/256, grady.data[i]/256]
@@ -105,7 +99,9 @@ class @FeatureCanvas extends Canvas
     data: data
 
   run: =>
-    @set_pixels do @corner
+    @fill 'white'
+    @copy_from @other
+    @set_pixels @corner do @get_pixels
 
   get_pixels: =>
     @context.getImageData 0, 0, @context.canvas.width, @context.canvas.height
