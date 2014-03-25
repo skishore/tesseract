@@ -34,5 +34,11 @@ class @Canvas
     do @context.closePath
     @version += 1
 
+  draw_point: (point) =>
+    do @context.beginPath
+    @context.arc point.x, point.y, 0.01, 0, 2*Math.PI
+    do @context.stroke
+    @version += 1
+
   get_base64_image: =>
     do @context.canvas.toDataURL

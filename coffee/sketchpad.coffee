@@ -20,6 +20,8 @@ class @Sketchpad extends Canvas
 
   mousedown: (e) =>
     @cursor = @get_cursor e.originalEvent
+    if (@in_range @cursor) and (@mouse.mouse_down or @mouse.touch_enabled)
+      @draw_point @cursor
 
   mousemove: (e) =>
     [last_cursor, @cursor] = [@cursor, @get_cursor e.originalEvent]
