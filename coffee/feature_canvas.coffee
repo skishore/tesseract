@@ -1,4 +1,18 @@
 class @FeatureCanvas extends Canvas
+  gauss3: [
+    1, 2, 1,
+    2, 4, 2,
+    1, 2, 1,
+  ]
+
+  gauss5: [
+     2,   7,  12,   7,  2,
+     7,  31,  52,  31,  7,
+    12,  52, 127,  52, 12,
+     7,  31,  52,  31,  7,
+     2,   7,  12,   7,  2,
+  ]
+
   constructor: (elt) ->
     super elt
     @fill 'white'
@@ -38,33 +52,60 @@ class @FeatureCanvas extends Canvas
               r += dr*weight
               g += dg*weight
               b += db*weight
-        @set_pixel result, i, j, [r, g, b, 255]
+              a += da*weight
+        @set_pixel result, i, j, [r, g, b, a]
     result
 
-  get_gradx: =>
-    @convolve do @get_pixels, [
-      -1, 0, 1,
-      -2, 0, 2,
-      -1, 0, 1,
-    ]
+  blur: (pixels, radius, offset) =>
+    if radius == 1
+      return pixels
+    weights = @['gauss' + radius]
+    sum = 0
+    for weight in weights
+      sum += weight
+    weights = (weight/sum for weight in weights)
+    @convolve pixels, weights, offset
 
-  get_grady: =>
-    @convolve do @get_pixels, [
-      -1, -2, -1,
-      0, 0, 0,
-      1, 2, 1,
+  get_gradient: (offset) =>
+    pixels = do @get_pixels
+    [
+      (@convolve pixels, [-1, 0, 1, -2, 0, 2, -1, 0, 1], offset),
+      (@convolve pixels, [-1, -2, -1, 0, 0, 0, 1, 2, 1], offset),
     ]
 
   sobel: =>
-    gradx = do @get_gradx
-    grady = do @get_grady
+    [gradx, grady] = @get_gradient 128
     for i in [0...gradx.data.length] by 4
       gradx.data[i + 1] = grady.data[i]
       gradx.data[i + 2] = (gradx.data[i] + grady.data[i])/4
     gradx
 
+  corner: =>
+    [gradx, grady] = do @get_gradient
+    psd = new Array gradx.data.length
+    for i in [0...gradx.data.length] by 4
+      [ix, iy] = [gradx.data[i]/256, grady.data[i]/256]
+      # Compute a PSD matrix which represents the bilinear form that measures
+      # how fast the intensity of the image changes in any given direction.
+      psd[i] = ix*ix
+      psd[i + 1] = psd[i + 2] = ix*iy
+      psd[i + 3] = iy*iy
+    # Pack the matrices into a pixel buffer and apply a Gaussian blur to them.
+    psd_pixels = {width: gradx.width, height: gradx.height, data: psd}
+    data = (@blur psd_pixels, 3).data
+    # Compute the eigenvalue of the blurred matrix at each point.
+    for i in [0...gradx.data.length] by 4
+      trace = data[i] + data[i + 3]
+      det = data[i]*data[i + 3] - data[i + 1]*data[i + 2]
+      radicand = Math.sqrt(trace*trace - 4*det)
+      roots = [(radicand + trace)/2, (-radicand + trace)/2]
+      # We can reuse this buffer because we're returning after this loop.
+      [data[i], data[i + 1], data[i + 2], data[i + 3]] = \
+          [8*roots[0], 64*roots[1], 0, 255]
+    data: data
+
   run: =>
-    @set_pixels do @sobel
+    @set_pixels do @corner
 
   get_pixels: =>
     @context.getImageData 0, 0, @context.canvas.width, @context.canvas.height
@@ -73,4 +114,6 @@ class @FeatureCanvas extends Canvas
     destination = do @get_pixels
     for i in [0...pixels.data.length]
       destination.data[i] = (Math.min (Math.max pixels.data[i], 0), 255)
+    for i in [0...pixels.data.length] by 4
+      destination.data[i + 3] = 255
     @context.putImageData destination, 0, 0
