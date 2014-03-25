@@ -1,4 +1,4 @@
-DELAY = 200
+DELAY = 0
 
 LANGUAGE = 'kan'
 
@@ -40,9 +40,15 @@ window.onload = ->
 
   mouse = new Mouse
   sketchpad = new Sketchpad $('.sketchpad'), mouse
-  buffer = new Canvas $('.buffer')
+  buffer = new FeatureCanvas $('.buffer')
+
+  $(document).keydown (e) =>
+    if e.keyCode == 13
+      buffer.fill 'white'
+      buffer.copy_from sketchpad
 
   sketchpad.changed = (version) =>
+    return
     ocr_parent.stop().animate backgroundColor: '#CCC', DELAY
     buffer.fill 'white'
     buffer.copy_from sketchpad

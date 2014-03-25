@@ -8,6 +8,7 @@
 }
 
 body {
+  @include fill-parent;
   margin: 2%;
   text-align: center;
 
@@ -75,9 +76,13 @@ body {
   }
 
   .buffer {
-    display: none;
-    height: 256px;
-    width: 256px;
+    border: 1px dotted black;
+    position: fixed;
+    left: 128px;
+    top: 128px;
+    //display: none;
+    height: 128px;
+    width: 128px;
   }
 }
 
