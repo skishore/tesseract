@@ -1,4 +1,8 @@
 class @Feature extends Canvas
+  gauss2: [
+    7, 5,
+    3, 1,
+  ]
   gauss3: [
     1, 2, 1,
     2, 4, 2,
@@ -86,7 +90,7 @@ class @Feature extends Canvas
       psd[i + 3] = iy*iy
     # Pack the matrices into a pixel buffer and apply a Gaussian blur to them.
     psd_pixels = {width: gradx.width, height: gradx.height, data: psd}
-    data = (@blur psd_pixels, 3).data
+    data = (@blur psd_pixels, 2).data
     # Compute the eigenvalue of the blurred matrix at each point.
     for i in [0...gradx.data.length] by 4
       trace = data[i] + data[i + 3]
