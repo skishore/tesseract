@@ -46,6 +46,7 @@ window.onload = ->
     if e.keyCode == 13
       buffer.fill 'white'
       buffer.copy_from sketchpad
+      do buffer.run
 
   sketchpad.changed = (version) =>
     return

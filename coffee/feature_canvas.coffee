@@ -2,22 +2,23 @@ class @FeatureCanvas extends Canvas
   constructor: (elt) ->
     super elt
     @fill 'white'
-    window.x = @
+    elt.height 2*do elt.height
+    elt.width 2*do elt.width
 
   copy_from: (other) =>
     @fill 'white'
     super other
 
-  @get_pixel: (pixels, x, y) ->
+  get_pixel: (pixels, x, y) ->
     offset = 4*(x + pixels.width*y)
     (pixels.data[offset + i] for i in [0...4])
 
-  @set_pixel: (pixels, x, y, result) ->
+  set_pixel: (pixels, x, y, result) ->
     offset = 4*(x + pixels.width*y)
     for i in [0...4]
       pixels.data[offset + i] = result[i]
 
-  @convolve: (pixels, weights, offset) =>
+  convolve: (pixels, weights, offset) =>
     side = Math.round Math.sqrt weights.length
     half = Math.floor side/2
     offset = offset or 0
@@ -39,6 +40,31 @@ class @FeatureCanvas extends Canvas
               b += db*weight
         @set_pixel result, i, j, [r, g, b, 255]
     result
+
+  get_gradx: =>
+    @convolve do @get_pixels, [
+      -1, 0, 1,
+      -2, 0, 2,
+      -1, 0, 1,
+    ]
+
+  get_grady: =>
+    @convolve do @get_pixels, [
+      -1, -2, -1,
+      0, 0, 0,
+      1, 2, 1,
+    ]
+
+  sobel: =>
+    gradx = do @get_gradx
+    grady = do @get_grady
+    for i in [0...gradx.data.length] by 4
+      gradx.data[i + 1] = grady.data[i]
+      gradx.data[i + 2] = (gradx.data[i] + grady.data[i])/4
+    gradx
+
+  run: =>
+    @set_pixels do @sobel
 
   get_pixels: =>
     @context.getImageData 0, 0, @context.canvas.width, @context.canvas.height
