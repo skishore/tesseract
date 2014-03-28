@@ -18,8 +18,10 @@ class @Feature extends Canvas
 
   constructor: (elt, @other) ->
     super elt
-    elt.height 2*do elt.height
-    elt.width 2*do elt.width
+    @context.lineWidth = 2
+    #elt.height 2*do elt.height
+    #elt.width 2*do elt.width
+    window.feature = @
     do @run
 
   get_pixel: (pixels, x, y) ->
@@ -102,10 +104,72 @@ class @Feature extends Canvas
           [8*roots[0], 64*roots[1], 0, 255]
     data: data
 
+  get_bounds: (points) ->
+    x_values = (point.x for point in points)
+    y_values = (point.y for point in points)
+    return [
+      {x: (Math.min.apply 0, x_values), y: (Math.min.apply 0, y_values)},
+      {x: (Math.max.apply 0, x_values), y: (Math.max.apply 0, y_values)},
+    ]
+
+  rescale: (bounds, point) =>
+    [min, max] = bounds
+    x: @context.canvas.width*(point.x - min.x)/(max.x - min.x)
+    y: @context.canvas.height*(point.y - min.y)/(max.y - min.y)
+
+  sum: (values) =>
+    total = 0
+    for value in values
+      total += value
+    total
+
+  smooth: (stroke) =>
+    result = []
+    for i in [0...stroke.length]
+      points = [stroke[i]]
+      if i > 0
+        points.push stroke[i - 1]
+      if i < stroke.length - 1
+        points.push stroke[i + 1]
+      x_values = (point.x for point in points)
+      y_values = (point.y for point in points)
+      result.push
+        x: (@sum x_values)/points.length
+        y: (@sum y_values)/points.length
+    result
+
+  get_angle: (point1, point2) =>
+    Math.atan2 point2.y - point1.y, point2.x - point1.x
+
+  get_angle_color: (angle) ->
+    k = 10
+    angle = (angle + 3*Math.PI) % (2*Math.PI) - Math.PI
+    color = new $.Color k*255*angle/Math.PI, -k*255*angle/Math.PI, 0
+    do color.toString
+
+  copy_strokes: (other, color, smooth) =>
+    @context.strokeStyle = color
+    bounds = @get_bounds [].concat.apply [], other.strokes
+    strokes = ( \
+      (@rescale bounds, point for point in stroke) \
+      for stroke in other.strokes
+    )
+    for stroke in strokes
+      if smooth
+        stroke = @smooth stroke
+      last_angle = undefined
+      for i in [0...stroke.length - 1]
+        [last_angle, angle] = [angle, @get_angle stroke[i], stroke[i + 1]]
+        if i > 0
+          @context.strokeStyle = @get_angle_color angle - last_angle
+        @draw_line stroke[i], stroke[i + 1]
+
   run: =>
     @fill 'white'
-    @copy_from @other
-    @set_pixels @corner do @get_pixels
+    #@copy_strokes @other, 'red', false
+    @copy_strokes @other, 'black', true
+    #@copy_from @other
+    #@set_pixels @corner do @get_pixels
 
   get_pixels: =>
     @context.getImageData 0, 0, @context.canvas.width, @context.canvas.height

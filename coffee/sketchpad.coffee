@@ -7,11 +7,20 @@ class @Sketchpad extends Canvas
     $(document).bind @mouse.move_handler, @mousemove
     $(document).bind @mouse.up_handler, @mouseup
     @last_version = @version
+    @strokes = []
+
+  clear: =>
+    @strokes = []
+    super
 
   get_cursor: (e) =>
     offset = do @elt.offset
-    x: 1.0*(e.pageX - offset.left)*@context.canvas.width/do @elt.width
-    y: 1.0*(e.pageY - offset.top)*@context.canvas.height/do @elt.height
+    result =
+      x: 1.0*(e.pageX - offset.left)*@context.canvas.width/do @elt.width
+      y: 1.0*(e.pageY - offset.top)*@context.canvas.height/do @elt.height
+    if (@in_range result) and (@mouse.mouse_down or @mouse.touch_enabled)
+      @strokes[@strokes.length - 1]?.push result
+    result
 
   in_range: (cursor) =>
     (cursor and
@@ -19,6 +28,7 @@ class @Sketchpad extends Canvas
      cursor.y >= 0 and cursor.y < @context.canvas.height)
 
   mousedown: (e) =>
+    @strokes.push []
     @cursor = @get_cursor e.originalEvent
     if (@in_range @cursor) and (@mouse.mouse_down or @mouse.touch_enabled)
       @draw_point @cursor
