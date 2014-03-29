@@ -16,11 +16,15 @@ class @Feature extends Canvas
      2,   7,  12,   7,  2,
   ]
 
-  constructor: (elt, @other) ->
-    super elt
-    @context.lineWidth = 2
-    #elt.height 2*do elt.height
-    #elt.width 2*do elt.width
+  constructor: (@elt, @other) ->
+    super @elt
+    if @other.mouse.touch_enabled
+      @context.canvas.width = @context.canvas.width/2
+      @context.canvas.height = @context.canvas.height/2
+      do @set_line_style
+      @context.lineWidth = 1
+    else
+      @context.lineWidth = 2
     window.feature = @
     do @run
 
@@ -147,16 +151,14 @@ class @Feature extends Canvas
     color = new $.Color k*255*angle/Math.PI, -k*255*angle/Math.PI, 0
     do color.toString
 
-  copy_strokes: (other, color, smooth) =>
-    @context.strokeStyle = color
+  copy_strokes: (other) =>
     bounds = @get_bounds [].concat.apply [], other.strokes
     strokes = ( \
       (@rescale bounds, point for point in stroke) \
       for stroke in other.strokes
     )
     for stroke in strokes
-      if smooth
-        stroke = @smooth stroke
+      stroke = @smooth stroke
       last_angle = undefined
       for i in [0...stroke.length - 1]
         [last_angle, angle] = [angle, @get_angle stroke[i], stroke[i + 1]]
@@ -166,8 +168,8 @@ class @Feature extends Canvas
 
   run: =>
     @fill 'white'
-    #@copy_strokes @other, 'red', false
-    @copy_strokes @other, 'black', true
+    @copy_strokes @other
+    #@set_pixels @corner do @get_pixels
     #@copy_from @other
     #@set_pixels @corner do @get_pixels
 
