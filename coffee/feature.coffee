@@ -177,11 +177,12 @@ class @Feature extends Canvas
   viterbi: (angles) =>
     angles = @smooth_angles angles
     threshold = 0.01*Math.PI
+    sharp_threshold = 0.2*Math.PI
     states = {
       # TODO(skishore): Why don't these probabilities add up to 1?
-      0: (angle) -> if angle > threshold then 0.8 else 0.1
+      0: (angle) -> if angle > threshold then 0.8 else if angle > -sharp_threshold then 0.1 else 0.001
       1: (angle) -> if Math.abs(angle) > threshold then 0.05 else 0.9
-      2: (angle) -> if angle < -threshold then 0.8 else 0.1
+      2: (angle) -> if angle < -threshold then 0.8 else if angle < sharp_threshold then 0.1 else 0.001
     }
     transition_prob = 0.01
     memo = [{0: [0, undefined], 1: [0, undefined], 2: [0, undefined]}]
@@ -213,7 +214,7 @@ class @Feature extends Canvas
   get_state_color: (state) =>
     {0: '#C00', 1: '#000', 2: '#080'}[state]
 
-  copy_strokes: (other) =>
+  run_viterbi: (other) =>
     bounds = @get_bounds [].concat.apply [], other.strokes
     strokes = ( \
       (@rescale bounds, point for point in stroke) \
@@ -222,18 +223,84 @@ class @Feature extends Canvas
     for stroke in strokes
       if stroke.length < 2
         continue
-      stroke = @smooth stroke
+      stroke = @smooth @smooth @smooth stroke
       angles = @get_angles stroke
       states = @viterbi angles
+      # Draw a set of markers marking very high angle points.
+      old_width = @context.lineWidth
+      for i in [1...stroke.length - 1]
+        if (Math.abs angles[i]) > 0.1*Math.PI
+          @context.lineWidth = 2*(Math.abs angles[i])/(0.1*Math.PI)
+          @context.strokeStyle = 'blue'
+          @draw_point stroke[i]
+      @context.lineWidth = 1
       for i in [1...stroke.length - 1]
         @context.strokeStyle = @get_state_color states[i]
         @draw_line stroke[i], stroke[i + 1]
 
+  accumulate: (point, angle, accumulator) =>
+    size = 16
+    x = Math.floor size*point.x/@context.canvas.width
+    y = Math.floor size*point.y/@context.canvas.height
+    if x < 0 or x >= size or y < 0 or y >= size
+      return
+    key = x + size*y
+    # Compute a weight based on how close angle is to the ideal.
+    weight = if Math.abs(angle) > 0.2*Math.PI then 1 else 0
+    accumulator[key] = (accumulator[key] or 0) + weight
+
+  draw_centers: (accumulator) =>
+    [old_style, @context.strokeStyle] = [@context.strokeStyle, 'black']
+    size = 16
+    threshold = 4
+    for center of accumulator
+      if accumulator[center] > threshold
+        point =
+          x: @context.canvas.width*(center % size)/size
+          y: @context.canvas.height*(Math.floor center/size)/size
+        @draw_point point
+    @context.strokeStyle = old_style
+
+  hough_circles: (stroke) =>
+    norm = (point) ->
+      point.x*point.x + point.y*point.y
+    triangle = (a, b, c) ->
+      angle1 = Math.atan2 b.y - a.y, b.x - a.x
+      angle2 = Math.atan2 c.y - b.y, c.x - b.x
+      diff = (angle2 - angle1 + 3*Math.PI) % (2*Math.PI) - Math.PI
+    accumulator = {}
+    for i in [0...stroke.length]
+      for j in [5...10]
+        if i + 2*j >= stroke.length
+          break
+        [a, b, c] = [stroke[i], stroke[i + j], stroke[i + 2*j]]
+        angle = triangle a, b, c
+        [na, nb, nc] = [(norm a), (norm b), (norm c)]
+        d  = 2*(a.x*(b.y - c.y) + b.x*(c.y - a.y) + c.x*(a.y - b.y))
+        circumcenter =
+          x: (na*(b.y - c.y) + nb*(c.y - a.y) + nc*(a.y - b.y))/d
+          y: -(na*(b.x - c.x) + nb*(c.x - a.x) + nc*(a.x - b.x))/d
+        @accumulate circumcenter, angle, accumulator
+    @draw_centers accumulator
+
+  run_hough: (other) =>
+    @context.lineWidth = 2
+    @context.strokeStyle = '#CCC'
+    bounds = @get_bounds [].concat.apply [], other.strokes
+    strokes = ( \
+      (@rescale bounds, point for point in stroke) \
+      for stroke in other.strokes
+    )
+    for stroke in strokes
+      stroke = @smooth @smooth @smooth stroke
+      @hough_circles stroke
+      for i in [0...stroke.length - 1]
+        @draw_line stroke[i], stroke[i + 1]
+
   run: =>
     @fill 'white'
-    @copy_strokes @other
+    @run_viterbi @other
     #@set_pixels @corner do @get_pixels
-    #@copy_from @other
     #@set_pixels @corner do @get_pixels
 
   get_pixels: =>
