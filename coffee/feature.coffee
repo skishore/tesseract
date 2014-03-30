@@ -145,11 +145,73 @@ class @Feature extends Canvas
   get_angle: (point1, point2) =>
     Math.atan2 point2.y - point1.y, point2.x - point1.x
 
+  get_angles: (stroke) =>
+    if stroke.length < 2
+      return []
+    result = []
+    last_angle = undefined
+    angle = @get_angle stroke[0], stroke[1]
+    for i in [1...stroke.length - 1]
+      [last_angle, angle] = [angle, @get_angle stroke[i], stroke[i + 1]]
+      result.push (angle - last_angle + 3*Math.PI) % (2*Math.PI) - Math.PI
+    result
+
   get_angle_color: (angle) ->
+    if not angle
+      return 'black'
     k = 10
-    angle = (angle + 3*Math.PI) % (2*Math.PI) - Math.PI
     color = new $.Color k*255*angle/Math.PI, -k*255*angle/Math.PI, 0
     do color.toString
+
+  smooth_angles: (angles) =>
+    result = []
+    for i in [0...angles.length]
+      points = [angles[i]]
+      if i > 0
+        points.push angles[i - 1]
+      if i < angles.length - 1
+        points.push angles[i + 1]
+      result.push (@sum points)/points.length
+    result
+
+  viterbi: (angles) =>
+    angles = @smooth_angles angles
+    threshold = 0.01*Math.PI
+    states = {
+      # TODO(skishore): Why don't these probabilities add up to 1?
+      0: (angle) -> if angle > threshold then 0.8 else 0.1
+      1: (angle) -> if Math.abs(angle) > threshold then 0.05 else 0.9
+      2: (angle) -> if angle < -threshold then 0.8 else 0.1
+    }
+    transition_prob = 0.01
+    memo = [{0: [0, undefined], 1: [0, undefined], 2: [0, undefined]}]
+    for angle in angles
+      new_memo = {}
+      for state of states
+        [best_log, best_state] = [-Infinity, undefined]
+        for last_state of states
+          [last_log, _] = memo[memo.length - 1][last_state]
+          new_log = last_log + ( \
+              if last_state == state then 0 else Math.log transition_prob)
+          if new_log > best_log
+            [best_log, best_state] = [new_log, last_state]
+        penalty = Math.log states[state] angle
+        new_memo[state] = [best_log + penalty, best_state]
+      memo.push new_memo
+    [best_log, best_state] = [-Infinity, undefined]
+    for state of states
+      [log, _] = memo[memo.length - 1][state]
+      if log > best_log
+        [best_log, best_state] = [log, state]
+    result = [state]
+    for i in [memo.length - 1...1]
+      state = memo[i][state][1]
+      result.push state
+    do result.reverse
+    result
+
+  get_state_color: (state) =>
+    {0: '#C00', 1: '#000', 2: '#080'}[state]
 
   copy_strokes: (other) =>
     bounds = @get_bounds [].concat.apply [], other.strokes
@@ -158,12 +220,13 @@ class @Feature extends Canvas
       for stroke in other.strokes
     )
     for stroke in strokes
+      if stroke.length < 2
+        continue
       stroke = @smooth stroke
-      last_angle = undefined
-      for i in [0...stroke.length - 1]
-        [last_angle, angle] = [angle, @get_angle stroke[i], stroke[i + 1]]
-        if i > 0
-          @context.strokeStyle = @get_angle_color angle - last_angle
+      angles = @get_angles stroke
+      states = @viterbi angles
+      for i in [1...stroke.length - 1]
+        @context.strokeStyle = @get_state_color states[i]
         @draw_line stroke[i], stroke[i + 1]
 
   run: =>
