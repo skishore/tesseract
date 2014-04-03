@@ -297,9 +297,52 @@ class @Feature extends Canvas
       for i in [0...stroke.length - 1]
         @draw_line stroke[i], stroke[i + 1]
 
+  distance: (point1, point2) =>
+    [dx, dy] = [point2.x - point1.x, point2.y - point1.y]
+    return Math.sqrt dx*dx + dy*dy
+
+  draw_loops: (stroke) =>
+    n = 40
+    k = 0.2
+    i = 0
+    while i < stroke.length - 1
+      max_distance = -Infinity
+      found_loop = false
+      for j in [1...n]
+        if i + j >= stroke.length
+          break
+        distance = @distance stroke[i], stroke[i + j]
+        max_distance = Math.max distance, max_distance
+        if distance < k*max_distance
+          found_loop = true
+          @context.strokeStyle = '#080'
+          @draw_line stroke[i], stroke[i + j]
+          next_i = i + j
+          while i < next_i
+            @context.strokeStyle = '#C00'
+            @draw_line stroke[i], stroke[i + 1]
+            i += 1
+          break
+      if not found_loop
+        @context.strokeStyle = 'black'
+        @draw_line stroke[i], stroke[i + 1]
+        i += 1
+
+  find_loops: (other) =>
+    bounds = @get_bounds [].concat.apply [], other.strokes
+    strokes = ( \
+      (@rescale bounds, point for point in stroke) \
+      for stroke in other.strokes
+    )
+    for stroke in strokes
+      stroke = @smooth @smooth @smooth stroke
+      @draw_loops stroke
+
   run: =>
     @fill 'white'
-    @run_viterbi @other
+    #@run_viterbi @other
+    #@run_hough @other
+    @find_loops @other
     #@set_pixels @corner do @get_pixels
     #@set_pixels @corner do @get_pixels
 
