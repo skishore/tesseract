@@ -177,7 +177,7 @@ class @Feature extends Canvas
   viterbi: (angles) =>
     angles = @smooth_angles angles
     threshold = 0.01*Math.PI
-    sharp_threshold = 0.2*Math.PI
+    sharp_threshold = 0.1*Math.PI
     states = {
       # TODO(skishore): Why don't these probabilities add up to 1?
       0: (angle) -> if angle > threshold then 0.8 else if angle > -sharp_threshold then 0.1 else 0.001
@@ -214,29 +214,36 @@ class @Feature extends Canvas
   get_state_color: (state) =>
     {0: '#C00', 1: '#000', 2: '#080'}[state]
 
+  stretch: (bounds) =>
+    k = 0.1
+    [min, max] = bounds
+    return [
+      {x: min.x - k*(max.x - min.x), y: min.y - k*(max.y - min.y)},
+      {x: max.x + k*(max.x - min.x), y: max.y + k*(max.y - min.y)},
+    ]
+
   run_viterbi: (other) =>
-    bounds = @get_bounds [].concat.apply [], other.strokes
+    bounds = @stretch @get_bounds [].concat.apply [], other.strokes
     strokes = ( \
       (@rescale bounds, point for point in stroke) \
       for stroke in other.strokes
     )
     for stroke in strokes
-      if stroke.length < 2
+      if stroke.length < 3
         continue
       stroke = @smooth @smooth @smooth stroke
       angles = @get_angles stroke
       states = @viterbi angles
-      # Draw a set of markers marking very high angle points.
-      old_width = @context.lineWidth
       for i in [1...stroke.length - 1]
-        if (Math.abs angles[i]) > 0.1*Math.PI
-          @context.lineWidth = 2*(Math.abs angles[i])/(0.1*Math.PI)
-          @context.strokeStyle = 'blue'
-          @draw_point stroke[i]
-      @context.lineWidth = 1
-      for i in [1...stroke.length - 1]
-        @context.strokeStyle = @get_state_color states[i]
+        [last_state, state] = [state, states[i - 1]]
+        @context.strokeStyle = @get_state_color state
         @draw_line stroke[i], stroke[i + 1]
+        # Draw a circle to mark state transitions.
+        if state != last_state
+          [old_width, @context.lineWidth] = [@context.lineWidth, 4]
+          @context.strokeStyle = @get_state_color state
+          @draw_point stroke[i]
+          @context.lineWidth = old_width
 
   accumulate: (point, angle, accumulator) =>
     size = 16
@@ -340,9 +347,9 @@ class @Feature extends Canvas
 
   run: =>
     @fill 'white'
-    #@run_viterbi @other
     #@run_hough @other
-    @find_loops @other
+    @run_viterbi @other
+    #@find_loops @other
     #@set_pixels @corner do @get_pixels
     #@set_pixels @corner do @get_pixels
 
