@@ -214,8 +214,7 @@ class @Feature extends Canvas
   get_state_color: (state) =>
     {0: '#C00', 1: '#000', 2: '#080'}[state]
 
-  stretch: (bounds) =>
-    k = 0.1
+  stretch: (k, bounds) =>
     [min, max] = bounds
     return [
       {x: min.x - k*(max.x - min.x), y: min.y - k*(max.y - min.y)},
@@ -223,7 +222,7 @@ class @Feature extends Canvas
     ]
 
   run_viterbi: (other) =>
-    bounds = @stretch @get_bounds [].concat.apply [], other.strokes
+    bounds = @stretch 0.1, @get_bounds [].concat.apply [], other.strokes
     strokes = ( \
       (@rescale bounds, point for point in stroke) \
       for stroke in other.strokes
@@ -310,7 +309,7 @@ class @Feature extends Canvas
 
   draw_loops: (stroke) =>
     n = 40
-    k = 0.2
+    k = 0.5
     i = 0
     while i < stroke.length - 1
       max_distance = -Infinity
@@ -322,21 +321,21 @@ class @Feature extends Canvas
         max_distance = Math.max distance, max_distance
         if distance < k*max_distance
           found_loop = true
-          @context.strokeStyle = '#080'
+          @context.strokeStyle = '#000'
           @draw_line stroke[i], stroke[i + j]
           next_i = i + j
           while i < next_i
-            @context.strokeStyle = '#C00'
+            @context.strokeStyle = '#00C'
             @draw_line stroke[i], stroke[i + 1]
             i += 1
           break
       if not found_loop
         @context.strokeStyle = 'black'
-        @draw_line stroke[i], stroke[i + 1]
+        #@draw_line stroke[i], stroke[i + 1]
         i += 1
 
   find_loops: (other) =>
-    bounds = @get_bounds [].concat.apply [], other.strokes
+    bounds = @stretch 0.1, @get_bounds [].concat.apply [], other.strokes
     strokes = ( \
       (@rescale bounds, point for point in stroke) \
       for stroke in other.strokes
@@ -349,7 +348,7 @@ class @Feature extends Canvas
     @fill 'white'
     #@run_hough @other
     @run_viterbi @other
-    #@find_loops @other
+    @find_loops @other
     #@set_pixels @corner do @get_pixels
     #@set_pixels @corner do @get_pixels
 
