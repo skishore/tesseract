@@ -315,7 +315,7 @@ class @Feature extends Canvas
         if i + di >= stroke.length
           continue
         for dj in [-1, 0, 1]
-          if j + dj > 0 and i + j + dj >= stroke.length
+          if j + dj <= di or i + j + dj >= stroke.length
             continue
           distance = @distance stroke[i + di], stroke[i + j + dj]
           if distance < best_distance
@@ -328,7 +328,7 @@ class @Feature extends Canvas
 
   draw_loops: (stroke) =>
     n = 40
-    k = 0.5
+    [max_k, min_k] = [0.5, 0.1]
     i = 0
     while i < stroke.length - 1
       max_distance = -Infinity
@@ -338,7 +338,7 @@ class @Feature extends Canvas
           break
         distance = @distance stroke[i], stroke[i + j]
         max_distance = Math.max distance, max_distance
-        if distance < k*max_distance
+        if distance < (j*min_k + (n - j)*max_k)*max_distance/n
           found_loop = true
           [i, j] = @shrink_loop stroke, i, j
           @context.strokeStyle = '#000'
@@ -350,8 +350,6 @@ class @Feature extends Canvas
             i += 1
           break
       if not found_loop
-        @context.strokeStyle = 'black'
-        #@draw_line stroke[i], stroke[i + 1]
         i += 1
 
   find_loops: (other) =>
