@@ -307,6 +307,25 @@ class @Feature extends Canvas
     [dx, dy] = [point2.x - point1.x, point2.y - point1.y]
     return Math.sqrt dx*dx + dy*dy
 
+  shrink_loop: (stroke, i, j) =>
+    original_i = i
+    while true
+      best_distance = Infinity
+      for di in [0, 1]
+        if i + di >= stroke.length
+          continue
+        for dj in [-1, 0, 1]
+          if j + dj > 0 and i + j + dj >= stroke.length
+            continue
+          distance = @distance stroke[i + di], stroke[i + j + dj]
+          if distance < best_distance
+            best_distance = distance
+            [best_di, best_dj] = [di, dj]
+      if best_di == 0 and best_dj == 0
+        break
+      [i, j] = [i + best_di, j + best_dj - best_di]
+    return [i, j]
+
   draw_loops: (stroke) =>
     n = 40
     k = 0.5
@@ -321,6 +340,7 @@ class @Feature extends Canvas
         max_distance = Math.max distance, max_distance
         if distance < k*max_distance
           found_loop = true
+          [i, j] = @shrink_loop stroke, i, j
           @context.strokeStyle = '#000'
           @draw_line stroke[i], stroke[i + j]
           next_i = i + j
