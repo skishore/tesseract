@@ -271,11 +271,16 @@ class @Feature extends Canvas
     n = 40
     [max_k, min_k] = [0.5, 0.1]
     i = 0
+    # Get a list of states. We will only find loops among consecutive
+    # points in the stroke with the same state.
+    states = @viterbi @get_angles stroke
+    states.unshift states[0]
+    states.push states[states.length - 1]
     while i < stroke.length - 1
       max_distance = -Infinity
       found_loop = false
       for j in [1...n]
-        if i + j >= stroke.length
+        if (i + j >= stroke.length) or (states[i + j] != states[i])
           break
         distance = @distance stroke[i], stroke[i + j]
         max_distance = Math.max distance, max_distance
@@ -300,8 +305,9 @@ class @Feature extends Canvas
       for stroke in other.strokes
     )
     for stroke in strokes
-      stroke = @smooth @smooth @smooth stroke
-      @draw_loops stroke
+      if stroke.length > 2
+        stroke = @smooth @smooth @smooth stroke
+        @draw_loops stroke
 
   run: =>
     @fill 'white'
