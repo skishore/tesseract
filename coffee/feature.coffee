@@ -244,65 +244,6 @@ class @Feature extends Canvas
           @draw_point stroke[i]
           @context.lineWidth = old_width
 
-  accumulate: (point, angle, accumulator) =>
-    size = 16
-    x = Math.floor size*point.x/@context.canvas.width
-    y = Math.floor size*point.y/@context.canvas.height
-    if x < 0 or x >= size or y < 0 or y >= size
-      return
-    key = x + size*y
-    # Compute a weight based on how close angle is to the ideal.
-    weight = if Math.abs(angle) > 0.2*Math.PI then 1 else 0
-    accumulator[key] = (accumulator[key] or 0) + weight
-
-  draw_centers: (accumulator) =>
-    [old_style, @context.strokeStyle] = [@context.strokeStyle, 'black']
-    size = 16
-    threshold = 4
-    for center of accumulator
-      if accumulator[center] > threshold
-        point =
-          x: @context.canvas.width*(center % size)/size
-          y: @context.canvas.height*(Math.floor center/size)/size
-        @draw_point point
-    @context.strokeStyle = old_style
-
-  hough_circles: (stroke) =>
-    norm = (point) ->
-      point.x*point.x + point.y*point.y
-    triangle = (a, b, c) ->
-      angle1 = Math.atan2 b.y - a.y, b.x - a.x
-      angle2 = Math.atan2 c.y - b.y, c.x - b.x
-      diff = (angle2 - angle1 + 3*Math.PI) % (2*Math.PI) - Math.PI
-    accumulator = {}
-    for i in [0...stroke.length]
-      for j in [5...10]
-        if i + 2*j >= stroke.length
-          break
-        [a, b, c] = [stroke[i], stroke[i + j], stroke[i + 2*j]]
-        angle = triangle a, b, c
-        [na, nb, nc] = [(norm a), (norm b), (norm c)]
-        d  = 2*(a.x*(b.y - c.y) + b.x*(c.y - a.y) + c.x*(a.y - b.y))
-        circumcenter =
-          x: (na*(b.y - c.y) + nb*(c.y - a.y) + nc*(a.y - b.y))/d
-          y: -(na*(b.x - c.x) + nb*(c.x - a.x) + nc*(a.x - b.x))/d
-        @accumulate circumcenter, angle, accumulator
-    @draw_centers accumulator
-
-  run_hough: (other) =>
-    @context.lineWidth = 2
-    @context.strokeStyle = '#CCC'
-    bounds = @get_bounds [].concat.apply [], other.strokes
-    strokes = ( \
-      (@rescale bounds, point for point in stroke) \
-      for stroke in other.strokes
-    )
-    for stroke in strokes
-      stroke = @smooth @smooth @smooth stroke
-      @hough_circles stroke
-      for i in [0...stroke.length - 1]
-        @draw_line stroke[i], stroke[i + 1]
-
   distance: (point1, point2) =>
     [dx, dy] = [point2.x - point1.x, point2.y - point1.y]
     return Math.sqrt dx*dx + dy*dy
@@ -364,10 +305,8 @@ class @Feature extends Canvas
 
   run: =>
     @fill 'white'
-    #@run_hough @other
     @run_viterbi @other
     @find_loops @other
-    #@set_pixels @corner do @get_pixels
     #@set_pixels @corner do @get_pixels
 
   get_pixels: =>
