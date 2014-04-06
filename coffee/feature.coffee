@@ -19,9 +19,11 @@ class Stroke
   }
   transition_prob: 0.01
 
+  # The maximum number of stroke points in a loop.
+  loop_length: 80
   # How tolerant we are of unclosed loops at stroke endpoints. Set this
   # constant to 0 to ensure that all loops are complete.
-  loop_tolerance: 1
+  loop_tolerance: 0.25
 
   constructor: (bounds, stroke) ->
     stroke = @smooth_stroke stroke, @stroke_smoothing
@@ -57,7 +59,7 @@ class Stroke
   draw_loops: (stroke, canvas) =>
     i = 0
     while i < stroke.length
-      for j in [3...stroke.length - i]
+      for j in [3...@loop_length]
         if i + j + 1 >= stroke.length
           break
         [u, v, point] = @find_stroke_intersection stroke, i, i + j - 1
