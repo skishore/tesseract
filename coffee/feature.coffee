@@ -1,3 +1,6 @@
+test_case = JSON.parse '[[{"x":55.875,"y":73.40625},{"x":55.875,"y":74.40625},{"x":53.875,"y":80.40625},{"x":52.875,"y":85.40625},{"x":50.875,"y":90.40625},{"x":50.875,"y":96.40625},{"x":49.875,"y":101.40625},{"x":49.875,"y":106.40625},{"x":49.875,"y":111.40625},{"x":49.875,"y":117.40625},{"x":49.875,"y":125.40625},{"x":49.875,"y":130.40625},{"x":52.875,"y":137.40625},{"x":57.875,"y":140.40625},{"x":62.875,"y":142.40625},{"x":72.875,"y":143.40625},{"x":76.875,"y":144.40625},{"x":81.875,"y":144.40625},{"x":84.875,"y":144.40625},{"x":88.875,"y":141.40625},{"x":90.875,"y":139.40625},{"x":92.875,"y":135.40625},{"x":93.875,"y":131.40625},{"x":93.875,"y":126.40625},{"x":93.875,"y":123.40625},{"x":93.875,"y":120.40625},{"x":93.875,"y":118.40625},{"x":93.875,"y":117.40625},{"x":93.875,"y":116.40625},{"x":93.875,"y":117.40625},{"x":93.875,"y":118.40625},{"x":93.875,"y":120.40625},{"x":93.875,"y":122.40625},{"x":93.875,"y":125.40625},{"x":93.875,"y":132.40625},{"x":93.875,"y":135.40625},{"x":93.875,"y":139.40625},{"x":94.875,"y":143.40625},{"x":96.875,"y":146.40625},{"x":97.875,"y":148.40625},{"x":98.875,"y":150.40625},{"x":99.875,"y":151.40625},{"x":100.875,"y":151.40625},{"x":101.875,"y":151.40625},{"x":102.875,"y":151.40625},{"x":103.875,"y":151.40625}]]'
+
+
 class Stroke
   # The initial number of smoothing iterations applied to the stroke.
   stroke_smoothing: 3
@@ -26,7 +29,7 @@ class Stroke
       states = @viterbi @get_angles @stroke
       @states = @postprocess states
     else
-      @states = (0 for point in strokes)
+      @states = (0 for point in stroke)
 
   @get_bounds: (stroke) ->
     # Returns a [min, max] pair of corners of a box bounding the points.
@@ -37,12 +40,46 @@ class Stroke
       {x: (Math.max.apply 0, x_values), y: (Math.max.apply 0, y_values)},
     ]
 
+  distance: (point1, point2) =>
+    [dx, dy] = [point2.x - point1.x, point2.y - point1.y]
+    return Math.sqrt dx*dx + dy*dy
+
   draw: (canvas) =>
     for i in [0...@stroke.length]
       [last_state, state] = [state, @states[i]]
       if state == last_state
         canvas.context.strokeStyle = @get_state_color state
         canvas.draw_line @stroke[i - 1], @stroke[i]
+    @draw_loops @stroke, canvas
+
+  draw_loops: (stroke, canvas) =>
+    n = 40
+    i = 0
+    while i < stroke.length
+      for j in [2...n]
+        if i + j + 1 >= stroke.length
+          break
+        [u, v, point] = @find_stroke_intersection stroke, i, i + j
+        if point and 0 <= u < 1 and 0 <= v < 1
+          canvas.context.strokeStyle = '#00F'
+          for k in [i..i + j]
+            canvas.draw_line stroke[k], stroke[k + 1]
+          i += j
+      i += 1
+
+  find_intersection: (s1, t1, s2, t2) =>
+    d1 = {x: t1.x - s1.x, y: t1.y - s1.y}
+    d2 = {x: t2.x - s2.x, y: t2.y - s2.y}
+    det = (d1.x*d2.y - d1.y*d2.x)
+    if not det
+      return [undefined, undefined, undefined]
+    [dx, dy] = [s2.x - s1.x, s2.y - s1.y]
+    u = (dx*d2.y - dy*d2.x)/det
+    v = (dx*d1.y - dy*d1.x)/det
+    return [u, v, {x: s1.x + d1.x*u, y: s1.y + d1.y*u}]
+
+  find_stroke_intersection: (stroke, i, j) =>
+    @find_intersection stroke[i], stroke[i + 1], stroke[j], stroke[j + 1]
 
   get_angle: (point1, point2) =>
     # Returns the angle of the line formed between two points.
@@ -141,7 +178,7 @@ class Stroke
 
 class @Feature extends Canvas
   border: 0.1
-  line_width: 2
+  line_width: 1
   point_width: 4
 
   constructor: (@elt, @other) ->
@@ -162,78 +199,11 @@ class @Feature extends Canvas
     @context.lineWidth = @point_width
     super @rescale point
 
-  run_viterbi: (other) =>
-    bounds = Stroke.get_bounds [].concat.apply [], other.strokes
-    strokes = (new Stroke bounds, stroke for stroke in other.strokes)
-    for stroke in strokes
-      stroke.draw @
-
-  distance: (point1, point2) =>
-    [dx, dy] = [point2.x - point1.x, point2.y - point1.y]
-    return Math.sqrt dx*dx + dy*dy
-
-  shrink_loop: (stroke, i, j) =>
-    original_i = i
-    while true
-      best_distance = Infinity
-      for di in [0, 1]
-        if i + di >= stroke.length
-          continue
-        for dj in [-1, 0, 1]
-          if j + dj <= di or i + j + dj >= stroke.length
-            continue
-          distance = @distance stroke[i + di], stroke[i + j + dj]
-          if distance < best_distance
-            best_distance = distance
-            [best_di, best_dj] = [di, dj]
-      if best_di == 0 and best_dj == 0
-        break
-      [i, j] = [i + best_di, j + best_dj - best_di]
-    return [i, j]
-
-  draw_loops: (stroke) =>
-    n = 40
-    [max_k, min_k] = [0.5, 0.1]
-    i = 0
-    # Get a list of states. We will only find loops among consecutive
-    # points in the stroke with the same state.
-    states = @viterbi @get_angles stroke
-    states.unshift states[0]
-    states.push states[states.length - 1]
-    while i < stroke.length - 1
-      max_distance = -Infinity
-      found_loop = false
-      for j in [1...n]
-        if (i + j >= stroke.length) or (states[i + j] != states[i])
-          break
-        distance = @distance stroke[i], stroke[i + j]
-        max_distance = Math.max distance, max_distance
-        if distance < (j*min_k + (n - j)*max_k)*max_distance/n
-          found_loop = true
-          [i, j] = @shrink_loop stroke, i, j
-          @context.strokeStyle = '#000'
-          @draw_line stroke[i], stroke[i + j]
-          next_i = i + j
-          while i < next_i
-            @context.strokeStyle = '#00C'
-            @draw_line stroke[i], stroke[i + 1]
-            i += 1
-          break
-      if not found_loop
-        i += 1
-
-  find_loops: (other) =>
-    bounds = @stretch 0.1, @get_bounds [].concat.apply [], other.strokes
-    strokes = ( \
-      (@rescale bounds, point for point in stroke) \
-      for stroke in other.strokes
-    )
-    for stroke in strokes
-      if stroke.length > 2
-        stroke = @smooth @smooth @smooth stroke
-        @draw_loops stroke
-
   run: =>
     @fill 'white'
-    @run_viterbi @other
-    #@find_loops @other
+    @other.strokes = test_case
+    strokes = @other.strokes
+    bounds = Stroke.get_bounds [].concat.apply [], strokes
+    strokes = (new Stroke bounds, stroke for stroke in strokes)
+    for stroke in strokes
+      stroke.draw @
