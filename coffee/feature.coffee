@@ -1,6 +1,9 @@
 class Stroke
   # The initial number of smoothing iterations applied to the stroke.
   stroke_smoothing: 3
+  # The maximum number of points and length of a hook.
+  hook_count: 10
+  hook_length: 0.1
 
   # Constants that control the hidden Markov model used to decompose strokes.
   # State 0 -> straight, state 1 -> clockwise, state 2 -> counterclockwise.
@@ -20,7 +23,7 @@ class Stroke
   transition_prob: 0.01
 
   # The maximum number of stroke points in a loop.
-  loop_length: 80
+  loop_count: 80
   # How tolerant we are of unclosed loops at stroke endpoints. Set this
   # constant to 0 to ensure that all loops are complete.
   loop_tolerance: 0.25
@@ -28,12 +31,12 @@ class Stroke
   constructor: (bounds, stroke) ->
     stroke = @smooth_stroke stroke, @stroke_smoothing
     @stroke = (@rescale bounds, point for point in stroke)
-    if stroke.length > 2
+    if @stroke.length > 2
       states = @viterbi @get_angles @stroke
-      @states = @postprocess states
+      @states = @postprocess @stroke, states
       @loops = @find_loops @stroke, @states
     else
-      @states = (0 for point in stroke)
+      @states = (0 for point in @stroke)
       @loops = []
 
   @get_bounds: (stroke) ->
@@ -65,7 +68,7 @@ class Stroke
     loops = []
     i = 0
     while i < stroke.length
-      for j in [3...@loop_length]
+      for j in [3...@loop_count]
         if i + j + 1 >= stroke.length
           break
         [u, v, point] = @find_stroke_intersection stroke, i, i + j - 1
@@ -146,11 +149,28 @@ class Stroke
   get_state_color: (state) =>
     {0: '#000', 1: '#C00', 2: '#080'}[state]
 
-  postprocess: (states) =>
+  postprocess: (stroke, states) =>
     # Takes an (n - 2)-element list of states and extends it to a list of n
     # states, one for each stroke point. Also does some final cleanup.
     states.unshift states[0]
     states.push states[states.length - 1]
+    @remove_hooks stroke, states
+
+  remove_hooks: (stroke, states) =>
+    size = stroke.length
+    if size > @hook_count
+      # Remove hooks at the beginning of the stroke.
+      for i in [0...@hook_count]
+        if (@distance stroke[0], stroke[i]) > @hook_length
+          break
+      for j in [0...i]
+        states[j] = states[i]
+      # Remove hooks at the end of the stroke.
+      for i in [size - 1..size - @hook_count]
+        if (@distance stroke[size - 1], stroke[i]) > @hook_length
+          break
+      for j in [size - 1...i]
+        states[j] = states[i]
     states
 
   rescale: (bounds, point) =>
