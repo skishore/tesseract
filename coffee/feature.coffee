@@ -56,8 +56,9 @@ class Stroke
   draw: (canvas) =>
     for i in [0...@stroke.length]
       [last_state, state] = [state, @states[i]]
+      canvas.context.strokeStyle = @get_state_color state
+      canvas.draw_point @stroke[i]
       if state == last_state
-        canvas.context.strokeStyle = @get_state_color state
         canvas.draw_line @stroke[i - 1], @stroke[i]
     for [i, j] in @loops
       for k in [i...j]
