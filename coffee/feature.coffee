@@ -90,18 +90,21 @@ class Util
 
 
 class Segment
-  constructor: (stroke, state, @i, @j) ->
-    @stroke = stroke.slice i, j
+  constructor: (@stroke, @state, @i, @j) ->
+    @count = j - i
     @length = Util.sum (
         Util.distance stroke[k], stroke[k + 1] for k in [i...j - 1])
+
+  merge: (other) =>
+    if @j != other.i then console.log 'Unexpected merge!'
+    @count += other.count
+    @j = other.j
+    @length += other.length
 
 
 class Stroke
   # The initial number of smoothing iterations applied to the stroke.
   stroke_smoothing: 3
-  # The maximum number of points and length of a hook.
-  hook_count: 10
-  hook_length: 0.1
 
   # Constants that control the hidden Markov model used to decompose strokes.
   # State 0 -> straight, state 1 -> clockwise, state 2 -> counterclockwise.
@@ -126,6 +129,14 @@ class Stroke
   # constant to 0 to ensure that all loops are complete.
   loop_tolerance: 0.25
 
+  # The maximum number of points and length of a hook.
+  hook_count: 10
+  hook_length: 0.1
+
+  # Thresholds controlling stroke segmentation during preprocessing.
+  segment_length_threshold: 0.2
+  merge_threshold: 1.0
+
   constructor: (bounds, stroke) ->
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
     @stroke = (Util.rescale bounds, point for point in stroke)
@@ -136,19 +147,19 @@ class Stroke
     else
       @states = (0 for point in @stroke)
       @loops = []
-    @segments = @segment bounds, @stroke, @states, @loops
+    @segments = @segment @stroke, @states, @loops
 
   draw: (canvas) =>
-    for i in [0...@stroke.length]
-      [last_state, state] = [state, @states[i]]
-      canvas.context.strokeStyle = @get_state_color state
-      canvas.draw_point @stroke[i]
-      if state == last_state
-        canvas.draw_line @stroke[i - 1], @stroke[i]
+    for segment in @segments
+      canvas.context.strokeStyle = @get_state_color segment.state
+      for i in [segment.i...segment.j]
+        #canvas.draw_point @stroke[i]
+        if i + 1 < segment.j
+          canvas.draw_line @stroke[i], @stroke[i + 1]
     for [i, j] in @loops
-      for k in [i...j]
+      for k in [i...j - 1]
         canvas.context.strokeStyle = '#00C'
-        canvas.draw_line @stroke[k], @stroke[k + 1]
+        #canvas.draw_line @stroke[k], @stroke[k + 1]
 
   find_loops: (stroke, states) =>
     loops = []
@@ -159,7 +170,7 @@ class Stroke
           break
         [u, v, point] = @find_stroke_intersection stroke, i, i + j - 1
         if point and 0 <= u < 1 and 0 <= v < 1
-            loops.push [i, i + j]
+            loops.push [i, i + j + 1]
             i += j
       i += 1
     @find_loose_loops stroke, states, loops
@@ -170,7 +181,7 @@ class Stroke
       dir = if i == 0 then 1 else -1
       j = i + 3*dir
       if loops.length
-        bound = if i == 0 then loops[0][0] else loops[loops.length - 1][1]
+        bound = if i == 0 then loops[0][0] else loops[loops.length - 1][1] - 1
       else
         bound = if i == 0 then stroke.length else 0
       while dir*j < dir*bound
@@ -183,7 +194,7 @@ class Stroke
         skip_v = j == stroke.length - 2 and v > 1
         if point and dir*u < (dir - 1)/2 and (0 <= v < 1 or skip_v) and
             (Util.distance stroke[i], point) < @loop_tolerance
-          if i == 0 then loops.unshift [i, j] else loops.push [j - 1, i + 1]
+          if i == 0 then loops.unshift [i, j + 1] else loops.push [j - 1, i + 2]
           break
         j += dir
     loops
@@ -222,24 +233,34 @@ class Stroke
     # Returns a list of segments that (almost) partition the stroke.
     segments = @segment_states stroke, states
     segments = @merge_segments segments, stroke, states
+    segments
 
   segment_states: (stroke, states) =>
     # Returns the list of segments based on on state data.
     result = []
     for state, i in states
       if result.length and state == states[result[result.length - 1][0]]
-        result[result.length - 1][1] = i
+        result[result.length - 1][1] = i + 1
       else
-        result.push [i, i]
-    result
+        result.push [i, i + 1]
+    (new Segment stroke, states[i], i, j for [i, j] in result)
 
   merge_segments: (segments, stroke, states) =>
     result = []
-    for segment, i in segments
-      if i == 0 and 0 < i < segments.length - 1 and
-          segments[i - 1].state == segments[i - 2].state != 0
-        if segment.get_length > 0
-          return true
+    i = 0
+    while i < segments.length
+      segment = segments[i]
+      if result.length and i < segments.length - 1
+        [prev, next] = [result[result.length - 1], segments[i + 1]]
+        if segment.state == 0 and prev.state == next.state != 0
+          if segment.length < @merge_threshold*(prev.length + next.length)
+            prev.merge segment
+            prev.merge next
+            i += 2
+            continue
+      result.push segment
+      i += 1
+    result
 
   viterbi: (angles) =>
     # Finds the maximum-likelihood state list of an HMM for the list of angles.
@@ -268,10 +289,10 @@ class Stroke
       [log, _] = memo[memo.length - 1][state]
       if log > best_log
         [best_log, best_state] = [log, state]
-    result = [state]
+    result = [parseInt state]
     for i in [memo.length - 1...1]
       state = memo[i][state][1]
-      result.push state
+      result.push parseInt state
     do result.reverse
     result
 
