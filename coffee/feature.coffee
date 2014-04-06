@@ -1,3 +1,9 @@
+# TODO: Instead of adding tolerance for endpoint loops in the main loop-
+# finding code, we should have a separate endpoint loop finding code that
+# works as follows: it starts at the first point and looks for near-closed
+# loops, but it stops at a color change or an already detected loop.
+
+
 class Stroke
   # The initial number of smoothing iterations applied to the stroke.
   stroke_smoothing: 3
