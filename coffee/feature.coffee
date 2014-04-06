@@ -1,56 +1,57 @@
-class @Feature extends Canvas
-  constructor: (@elt, @other) ->
-    super @elt
-    if @other.mouse.touch_enabled
-      @context.canvas.width = @context.canvas.width/2
-      @context.canvas.height = @context.canvas.height/2
-      do @set_line_style
-      @context.lineWidth = 1
-    else
-      @context.lineWidth = 2
-    window.feature = @
-    do @run
+class Stroke
+  # The initial number of smoothing iterations applied to the stroke.
+  stroke_smoothing: 3
 
-  get_bounds: (points) ->
-    x_values = (point.x for point in points)
-    y_values = (point.y for point in points)
+  # Constants that control the hidden Markov model used to decompose strokes.
+  # State 0 -> straight, state 1 -> clockwise, state 2 -> counterclockwise.
+  angle_smoothing: 1
+  threshold = 0.01*Math.PI
+  sharp_threshold = 0.1*Math.PI
+  pdfs: {
+    0: (angle) ->
+      if Math.abs(angle) > threshold then 0.05 else 0.9
+    1: (angle) ->
+      if angle > threshold then 0.8
+      else if angle > -sharp_threshold then 0.1 else 0.001
+    2: (angle) ->
+      if angle < -threshold then 0.8
+      else if angle < sharp_threshold then 0.1 else 0.001
+  }
+  transition_prob: 0.01
+
+  constructor: (bounds, stroke) ->
+    stroke = @smooth_stroke stroke, @stroke_smoothing
+    @stroke = (@rescale bounds, point for point in stroke)
+    if stroke.length > 2
+      states = @viterbi @get_angles @stroke
+      @states = @postprocess states
+    else
+      @states = (0 for point in strokes)
+
+  @get_bounds: (stroke) ->
+    # Returns a [min, max] pair of corners of a box bounding the points.
+    x_values = (point.x for point in stroke)
+    y_values = (point.y for point in stroke)
     return [
       {x: (Math.min.apply 0, x_values), y: (Math.min.apply 0, y_values)},
       {x: (Math.max.apply 0, x_values), y: (Math.max.apply 0, y_values)},
     ]
 
-  rescale: (bounds, point) =>
-    [min, max] = bounds
-    x: @context.canvas.width*(point.x - min.x)/(max.x - min.x)
-    y: @context.canvas.height*(point.y - min.y)/(max.y - min.y)
-
-  sum: (values) =>
-    total = 0
-    for value in values
-      total += value
-    total
-
-  smooth: (stroke) =>
-    result = []
-    for i in [0...stroke.length]
-      points = [stroke[i]]
-      if i > 0
-        points.push stroke[i - 1]
-      if i < stroke.length - 1
-        points.push stroke[i + 1]
-      x_values = (point.x for point in points)
-      y_values = (point.y for point in points)
-      result.push
-        x: (@sum x_values)/points.length
-        y: (@sum y_values)/points.length
-    result
+  draw: (canvas) =>
+    for i in [0...@stroke.length]
+      [last_state, state] = [state, @states[i]]
+      if state == last_state
+        canvas.context.strokeStyle = @get_state_color state
+        canvas.draw_line @stroke[i - 1], @stroke[i]
 
   get_angle: (point1, point2) =>
+    # Returns the angle of the line formed between two points.
     Math.atan2 point2.y - point1.y, point2.x - point1.x
 
   get_angles: (stroke) =>
-    if stroke.length < 2
-      return []
+    # Takes an n-point stroke of n elements and returns an (n - 2)-element
+    # list of angles between adjacent points. This method will throw an error
+    # if the stroke has <= 2 points.
     result = []
     last_angle = undefined
     angle = @get_angle stroke[0], stroke[1]
@@ -59,51 +60,74 @@ class @Feature extends Canvas
       result.push (angle - last_angle + 3*Math.PI) % (2*Math.PI) - Math.PI
     result
 
-  get_angle_color: (angle) ->
-    if not angle
-      return 'black'
-    k = 10
-    color = new $.Color k*255*angle/Math.PI, -k*255*angle/Math.PI, 0
-    do color.toString
+  get_state_color: (state) =>
+    {0: '#000', 1: '#C00', 2: '#080'}[state]
 
-  smooth_angles: (angles) =>
-    result = []
-    for i in [0...angles.length]
-      points = [angles[i]]
-      if i > 0
-        points.push angles[i - 1]
-      if i < angles.length - 1
-        points.push angles[i + 1]
-      result.push (@sum points)/points.length
-    result
+  postprocess: (states) =>
+    # Takes an (n - 2)-element list of states and extends it to a list of n
+    # states, one for each stroke point. Also does some final cleanup.
+    states.unshift states[0]
+    states.push states[states.length - 1]
+    states
+
+  rescale: (bounds, point) =>
+    # Takes a list of points within the given bounds, and rescales them so that
+    # the points are bounded within the unit square.
+    [min, max] = bounds
+    x: (point.x - min.x)/(max.x - min.x)
+    y: (point.y - min.y)/(max.y - min.y)
+
+  smooth: (values, iterations) =>
+    # Runs a number of smoothing iterations on the list. In each iteration,
+    # each value in the list is averaged with its neightbors.
+    for i in [0...iterations]
+      result = []
+      for i in [0...values.length]
+        samples = ( \
+          values[i + j] for j in [-1..1] \
+          when 0 <= i + j < values.length
+        )
+        result.push (@sum samples)/samples.length
+      values = result
+    values
+
+  smooth_stroke: (stroke, iterations) =>
+    # Smooths the list of points coordinate-by-coordinate.
+    x_values = @smooth (point.x for point in stroke), iterations
+    y_values = @smooth (point.y for point in stroke), iterations
+    return ({x: x_values[i], y: y_values[i]} for i in [0...stroke.length])
+
+  sum: (values) ->
+    # Return the sum of elements in the list.
+    total = 0
+    for value in values
+      total += value
+    total
 
   viterbi: (angles) =>
-    angles = @smooth_angles angles
-    threshold = 0.01*Math.PI
-    sharp_threshold = 0.1*Math.PI
-    states = {
-      # TODO(skishore): Why don't these probabilities add up to 1?
-      0: (angle) -> if angle > threshold then 0.8 else if angle > -sharp_threshold then 0.1 else 0.001
-      1: (angle) -> if Math.abs(angle) > threshold then 0.05 else 0.9
-      2: (angle) -> if angle < -threshold then 0.8 else if angle < sharp_threshold then 0.1 else 0.001
-    }
-    transition_prob = 0.01
+    # Finds the maximum-likelihood state list of an HMM for the list of angles.
+    angles = @smooth angles, @angle_smoothing
+    # Build a memo, where memo[i][state] is a pair [best_log, last_state],
+    # where best_log is the greatest possible log probability assigned to
+    # any chain that ends at state `state` at index i, and last_state is the
+    # state at index i - 1 for that chain.
     memo = [{0: [0, undefined], 1: [0, undefined], 2: [0, undefined]}]
     for angle in angles
       new_memo = {}
-      for state of states
+      for state of @pdfs
         [best_log, best_state] = [-Infinity, undefined]
-        for last_state of states
+        for last_state of @pdfs
           [last_log, _] = memo[memo.length - 1][last_state]
           new_log = last_log + ( \
-              if last_state == state then 0 else Math.log transition_prob)
+              if last_state == state then 0 else Math.log @transition_prob)
           if new_log > best_log
             [best_log, best_state] = [new_log, last_state]
-        penalty = Math.log states[state] angle
+        penalty = Math.log @pdfs[state] angle
         new_memo[state] = [best_log + penalty, best_state]
       memo.push new_memo
     [best_log, best_state] = [-Infinity, undefined]
-    for state of states
+    # Trace back through the DP memo to recover the MLE state chain.
+    for state of @pdfs
       [log, _] = memo[memo.length - 1][state]
       if log > best_log
         [best_log, best_state] = [log, state]
@@ -114,38 +138,35 @@ class @Feature extends Canvas
     do result.reverse
     result
 
-  get_state_color: (state) =>
-    {0: '#C00', 1: '#000', 2: '#080'}[state]
 
-  stretch: (k, bounds) =>
-    [min, max] = bounds
-    return [
-      {x: min.x - k*(max.x - min.x), y: min.y - k*(max.y - min.y)},
-      {x: max.x + k*(max.x - min.x), y: max.y + k*(max.y - min.y)},
-    ]
+class @Feature extends Canvas
+  border: 0.1
+  line_width: 2
+  point_width: 4
+
+  constructor: (@elt, @other) ->
+    super @elt
+    window.feature = @
+    window.Stroke = Stroke
+    do @run
+
+  rescale: (point) =>
+    x: ((1 - 2*@border)*point.x + @border)*@context.canvas.width
+    y: ((1 - 2*@border)*point.y + @border)*@context.canvas.height
+
+  draw_line: (point1, point2, color) =>
+    @context.lineWidth = @line_width
+    super (@rescale point1), (@rescale point2)
+
+  draw_point: (point, color) =>
+    @context.lineWidth = @point_width
+    super @rescale point
 
   run_viterbi: (other) =>
-    bounds = @stretch 0.1, @get_bounds [].concat.apply [], other.strokes
-    strokes = ( \
-      (@rescale bounds, point for point in stroke) \
-      for stroke in other.strokes
-    )
+    bounds = Stroke.get_bounds [].concat.apply [], other.strokes
+    strokes = (new Stroke bounds, stroke for stroke in other.strokes)
     for stroke in strokes
-      if stroke.length < 3
-        continue
-      stroke = @smooth @smooth @smooth stroke
-      angles = @get_angles stroke
-      states = @viterbi angles
-      for i in [1...stroke.length - 1]
-        [last_state, state] = [state, states[i - 1]]
-        @context.strokeStyle = @get_state_color state
-        @draw_line stroke[i], stroke[i + 1]
-        # Draw a circle to mark state transitions.
-        if state != last_state
-          [old_width, @context.lineWidth] = [@context.lineWidth, 4]
-          @context.strokeStyle = @get_state_color state
-          @draw_point stroke[i]
-          @context.lineWidth = old_width
+      stroke.draw @
 
   distance: (point1, point2) =>
     [dx, dy] = [point2.x - point1.x, point2.y - point1.y]
@@ -215,4 +236,4 @@ class @Feature extends Canvas
   run: =>
     @fill 'white'
     @run_viterbi @other
-    @find_loops @other
+    #@find_loops @other
