@@ -1,9 +1,3 @@
-# TODO: Instead of adding tolerance for endpoint loops in the main loop-
-# finding code, we should have a separate endpoint loop finding code that
-# works as follows: it starts at the first point and looks for near-closed
-# loops, but it stops at a color change or an already detected loop.
-
-
 class Stroke
   # The initial number of smoothing iterations applied to the stroke.
   stroke_smoothing: 3
@@ -37,8 +31,10 @@ class Stroke
     if stroke.length > 2
       states = @viterbi @get_angles @stroke
       @states = @postprocess states
+      @loops = @find_loops @stroke, @states
     else
       @states = (0 for point in stroke)
+      @loops = []
 
   @get_bounds: (stroke) ->
     # Returns a [min, max] pair of corners of a box bounding the points.
@@ -60,30 +56,48 @@ class Stroke
       if state == last_state
         canvas.context.strokeStyle = @get_state_color state
         canvas.draw_line @stroke[i - 1], @stroke[i]
-    @draw_loops @stroke, canvas
+    for [i, j] in @loops
+      for k in [i...j]
+        canvas.context.strokeStyle = '#00C'
+        canvas.draw_line @stroke[k], @stroke[k + 1]
 
-  draw_loops: (stroke, canvas) =>
+  find_loops: (stroke, states) =>
+    loops = []
     i = 0
     while i < stroke.length
       for j in [3...@loop_length]
         if i + j + 1 >= stroke.length
           break
         [u, v, point] = @find_stroke_intersection stroke, i, i + j - 1
-        if point
-          skip_u = (
-            i == 0 and u < 0 and
-            (@distance stroke[i], point) < @loop_tolerance
-          )
-          skip_v = (
-            i + j + 2 == stroke.length and v > 1 and
-            (@distance stroke[i + j + 1], point) < @loop_tolerance
-          )
-          if (0 <= u < 1 or skip_u) and (0 <= v < 1 or skip_v)
-            canvas.context.strokeStyle = '#00F'
-            for k in [i...i + j]
-              canvas.draw_line stroke[k], stroke[k + 1]
-            i += j + 1
+        if point and 0 <= u < 1 and 0 <= v < 1
+            loops.push [i, i + j]
+            i += j
       i += 1
+    @find_loose_loops stroke, states, loops
+
+  find_loose_loops: (stroke, states, loops) =>
+    for i in [0, stroke.length - 2]
+      states_found = {}
+      dir = if i == 0 then 1 else -1
+      j = i + 3*dir
+      if loops.length
+        bound = if i == 0 then loops[0][0] else loops[loops.length - 1][1]
+      else
+        bound = if i == 0 then stroke.length else 0
+      while dir*j < dir*bound
+        # Loose loops are not allowed to contain both cw and ccw segments.
+        states_found[states[j]] = true
+        if states_found[1] and states_found[2]
+          break
+        [u, v, point] = @find_stroke_intersection stroke, i, j - 1
+        # Add a special case for a loop that contains the entire stroke.
+        skip_v = j == stroke.length - 2 and v > 1
+        if point and dir*u < (dir - 1)/2 and (0 <= v < 1 or skip_v) and
+            (@distance stroke[i], stroke[j]) < @loop_tolerance
+          if i == 0 then loops.unshift [i, j] else loops.push [j - 1, i]
+          break
+        j += dir
+    loops
 
   find_intersection: (s1, t1, s2, t2) =>
     # Finds the intersection between rays s1 -> t1 and s2 -> t2, where the
