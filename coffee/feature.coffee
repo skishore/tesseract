@@ -1,6 +1,3 @@
-test_case = JSON.parse '[[{"x":55.875,"y":73.40625},{"x":55.875,"y":74.40625},{"x":53.875,"y":80.40625},{"x":52.875,"y":85.40625},{"x":50.875,"y":90.40625},{"x":50.875,"y":96.40625},{"x":49.875,"y":101.40625},{"x":49.875,"y":106.40625},{"x":49.875,"y":111.40625},{"x":49.875,"y":117.40625},{"x":49.875,"y":125.40625},{"x":49.875,"y":130.40625},{"x":52.875,"y":137.40625},{"x":57.875,"y":140.40625},{"x":62.875,"y":142.40625},{"x":72.875,"y":143.40625},{"x":76.875,"y":144.40625},{"x":81.875,"y":144.40625},{"x":84.875,"y":144.40625},{"x":88.875,"y":141.40625},{"x":90.875,"y":139.40625},{"x":92.875,"y":135.40625},{"x":93.875,"y":131.40625},{"x":93.875,"y":126.40625},{"x":93.875,"y":123.40625},{"x":93.875,"y":120.40625},{"x":93.875,"y":118.40625},{"x":93.875,"y":117.40625},{"x":93.875,"y":116.40625},{"x":93.875,"y":117.40625},{"x":93.875,"y":118.40625},{"x":93.875,"y":120.40625},{"x":93.875,"y":122.40625},{"x":93.875,"y":125.40625},{"x":93.875,"y":132.40625},{"x":93.875,"y":135.40625},{"x":93.875,"y":139.40625},{"x":94.875,"y":143.40625},{"x":96.875,"y":146.40625},{"x":97.875,"y":148.40625},{"x":98.875,"y":150.40625},{"x":99.875,"y":151.40625},{"x":100.875,"y":151.40625},{"x":101.875,"y":151.40625},{"x":102.875,"y":151.40625},{"x":103.875,"y":151.40625}]]'
-
-
 class Stroke
   # The initial number of smoothing iterations applied to the stroke.
   stroke_smoothing: 3
@@ -41,6 +38,7 @@ class Stroke
     ]
 
   distance: (point1, point2) =>
+    # Return the Euclidean distance between two points.
     [dx, dy] = [point2.x - point1.x, point2.y - point1.y]
     return Math.sqrt dx*dx + dy*dy
 
@@ -53,13 +51,13 @@ class Stroke
     @draw_loops @stroke, canvas
 
   draw_loops: (stroke, canvas) =>
-    n = 40
+    n = 80
     i = 0
     while i < stroke.length
-      for j in [2...n]
-        if i + j + 1 >= stroke.length
+      for j in [3...n]
+        if i + j >= stroke.length
           break
-        [u, v, point] = @find_stroke_intersection stroke, i, i + j
+        [u, v, point] = @find_stroke_intersection stroke, i, i + j - 1
         if point and 0 <= u < 1 and 0 <= v < 1
           canvas.context.strokeStyle = '#00F'
           for k in [i..i + j]
@@ -68,15 +66,29 @@ class Stroke
       i += 1
 
   find_intersection: (s1, t1, s2, t2) =>
+    # Finds the intersection between rays s1 -> t1 and s2 -> t2, where the
+    # ray a -> b is the ray that begins at a and passes through b.
+    #
+    # Returns a list [u, v, point], where point is the intersection point
+    # and u and v are the fraction of the distance along ray1 and ray2 that
+    # the point occurs. Return [und, und, und] if no intersection can be found.
     d1 = {x: t1.x - s1.x, y: t1.y - s1.y}
     d2 = {x: t2.x - s2.x, y: t2.y - s2.y}
+    [dx, dy] = [s2.x - s1.x, s2.y - s1.y]
     det = (d1.x*d2.y - d1.y*d2.x)
     if not det
+      # Handle degenerate cases where we may still have an intersection.
+      # If ray1 has positive length and ray2's start occurs on it, we will
+      # return a valid intersection.
+      big = (x) -> (Math.abs x) > 0.001
+      if ((big d1.x) or (big d1.y)) and not big dx*d1.y - dy*d1.x
+        dim = if big d1.x then 'x' else 'y'
+        u = (s2[dim] - s1[dim])/d1[dim]
+        return [u, 0, s2]
       return [undefined, undefined, undefined]
-    [dx, dy] = [s2.x - s1.x, s2.y - s1.y]
     u = (dx*d2.y - dy*d2.x)/det
     v = (dx*d1.y - dy*d1.x)/det
-    return [u, v, {x: s1.x + d1.x*u, y: s1.y + d1.y*u}]
+    [u, v, {x: s1.x + d1.x*u, y: s1.y + d1.y*u}]
 
   find_stroke_intersection: (stroke, i, j) =>
     @find_intersection stroke[i], stroke[i + 1], stroke[j], stroke[j + 1]
@@ -201,7 +213,6 @@ class @Feature extends Canvas
 
   run: =>
     @fill 'white'
-    @other.strokes = test_case
     strokes = @other.strokes
     bounds = Stroke.get_bounds [].concat.apply [], strokes
     strokes = (new Stroke bounds, stroke for stroke in strokes)
