@@ -19,6 +19,10 @@ class Stroke
   }
   transition_prob: 0.01
 
+  # How tolerant we are of unclosed loops at stroke endpoints. Set this
+  # constant to 0 to ensure that all loops are complete.
+  loop_tolerance: 1
+
   constructor: (bounds, stroke) ->
     stroke = @smooth_stroke stroke, @stroke_smoothing
     @stroke = (@rescale bounds, point for point in stroke)
@@ -51,18 +55,26 @@ class Stroke
     @draw_loops @stroke, canvas
 
   draw_loops: (stroke, canvas) =>
-    n = 80
     i = 0
     while i < stroke.length
-      for j in [3...n]
-        if i + j >= stroke.length
+      for j in [3...stroke.length - i]
+        if i + j + 1 >= stroke.length
           break
         [u, v, point] = @find_stroke_intersection stroke, i, i + j - 1
-        if point and 0 <= u < 1 and 0 <= v < 1
-          canvas.context.strokeStyle = '#00F'
-          for k in [i..i + j]
-            canvas.draw_line stroke[k], stroke[k + 1]
-          i += j
+        if point
+          skip_u = (
+            i == 0 and u < 0 and
+            (@distance stroke[i], point) < @loop_tolerance
+          )
+          skip_v = (
+            i + j + 2 == stroke.length and v > 1 and
+            (@distance stroke[i + j + 1], point) < @loop_tolerance
+          )
+          if (0 <= u < 1 or skip_u) and (0 <= v < 1 or skip_v)
+            canvas.context.strokeStyle = '#00F'
+            for k in [i...i + j]
+              canvas.draw_line stroke[k], stroke[k + 1]
+            i += j + 1
       i += 1
 
   find_intersection: (s1, t1, s2, t2) =>
