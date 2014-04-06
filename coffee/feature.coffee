@@ -1,3 +1,101 @@
+class Util
+  @angle: (point1, point2) ->
+    # Returns the angle of the line formed between two points.
+    Math.atan2 point2.y - point1.y, point2.x - point1.x
+
+  @angles: (stroke) ->
+    # Takes an n-point stroke of n elements and returns an (n - 2)-element
+    # list of angles between adjacent points. This method will throw an error
+    # if the stroke has <= 2 points.
+    result = []
+    last_angle = undefined
+    angle = Util.angle stroke[0], stroke[1]
+    for i in [1...stroke.length - 1]
+      [last_angle, angle] = [angle, Util.angle stroke[i], stroke[i + 1]]
+      result.push (angle - last_angle + 3*Math.PI) % (2*Math.PI) - Math.PI
+    result
+
+  @bounds: (stroke) ->
+    # Returns a [min, max] pair of corners of a box bounding the points.
+    x_values = (point.x for point in stroke)
+    y_values = (point.y for point in stroke)
+    return [
+      {x: (Math.min.apply 0, x_values), y: (Math.min.apply 0, y_values)},
+      {x: (Math.max.apply 0, x_values), y: (Math.max.apply 0, y_values)},
+    ]
+
+  @distance: (point1, point2) ->
+    # Return the Euclidean distance between two points.
+    [dx, dy] = [point2.x - point1.x, point2.y - point1.y]
+    return Math.sqrt dx*dx + dy*dy
+
+  @intersection: (s1, t1, s2, t2) ->
+    # Finds the intersection between rays s1 -> t1 and s2 -> t2, where the
+    # ray a -> b is the ray that begins at a and passes through b.
+    #
+    # Returns a list [u, v, point], where point is the intersection point
+    # and u and v are the fraction of the distance along ray1 and ray2 that
+    # the point occurs. Return [und, und, und] if no intersection can be found.
+    d1 = {x: t1.x - s1.x, y: t1.y - s1.y}
+    d2 = {x: t2.x - s2.x, y: t2.y - s2.y}
+    [dx, dy] = [s2.x - s1.x, s2.y - s1.y]
+    det = (d1.x*d2.y - d1.y*d2.x)
+    if not det
+      # Handle degenerate cases where we may still have an intersection.
+      # If ray1 has positive length and ray2's start occurs on it, we will
+      # return a valid intersection.
+      big = (x) -> (Math.abs x) > 0.001
+      if ((big d1.x) or (big d1.y)) and not big dx*d1.y - dy*d1.x
+        dim = if big d1.x then 'x' else 'y'
+        u = (s2[dim] - s1[dim])/d1[dim]
+        return [u, 0, s2]
+      return [undefined, undefined, undefined]
+    u = (dx*d2.y - dy*d2.x)/det
+    v = (dx*d1.y - dy*d1.x)/det
+    [u, v, {x: s1.x + d1.x*u, y: s1.y + d1.y*u}]
+
+  @rescale: (bounds, point) ->
+    # Takes a list of points within the given bounds, and rescales them so that
+    # the points are bounded within the unit square.
+    [min, max] = bounds
+    x: (point.x - min.x)/(max.x - min.x)
+    y: (point.y - min.y)/(max.y - min.y)
+
+  @smooth: (values, iterations) ->
+    # Runs a number of smoothing iterations on the list. In each iteration,
+    # each value in the list is averaged with its neightbors.
+    for i in [0...iterations]
+      result = []
+      for i in [0...values.length]
+        samples = ( \
+          values[i + j] for j in [-1..1] \
+          when 0 <= i + j < values.length
+        )
+        result.push (Util.sum samples)/samples.length
+      values = result
+    values
+
+  @smooth_stroke: (stroke, iterations) ->
+    # Smooths the list of points coordinate-by-coordinate.
+    x_values = Util.smooth (point.x for point in stroke), iterations
+    y_values = Util.smooth (point.y for point in stroke), iterations
+    return ({x: x_values[i], y: y_values[i]} for i in [0...stroke.length])
+
+  @sum: (values) ->
+    # Return the sum of elements in the list.
+    total = 0
+    for value in values
+      total += value
+    total
+
+
+class Segment
+  constructor: (stroke, state, @i, @j) ->
+    @stroke = stroke.slice i, j
+    @length = Util.sum (
+        Util.distance stroke[k], stroke[k + 1] for k in [i...j - 1])
+
+
 class Stroke
   # The initial number of smoothing iterations applied to the stroke.
   stroke_smoothing: 3
@@ -29,29 +127,16 @@ class Stroke
   loop_tolerance: 0.25
 
   constructor: (bounds, stroke) ->
-    stroke = @smooth_stroke stroke, @stroke_smoothing
-    @stroke = (@rescale bounds, point for point in stroke)
+    stroke = Util.smooth_stroke stroke, @stroke_smoothing
+    @stroke = (Util.rescale bounds, point for point in stroke)
     if @stroke.length > 2
-      states = @viterbi @get_angles @stroke
+      states = @viterbi Util.angles @stroke
       @states = @postprocess @stroke, states
       @loops = @find_loops @stroke, @states
     else
       @states = (0 for point in @stroke)
       @loops = []
-
-  @get_bounds: (stroke) ->
-    # Returns a [min, max] pair of corners of a box bounding the points.
-    x_values = (point.x for point in stroke)
-    y_values = (point.y for point in stroke)
-    return [
-      {x: (Math.min.apply 0, x_values), y: (Math.min.apply 0, y_values)},
-      {x: (Math.max.apply 0, x_values), y: (Math.max.apply 0, y_values)},
-    ]
-
-  distance: (point1, point2) =>
-    # Return the Euclidean distance between two points.
-    [dx, dy] = [point2.x - point1.x, point2.y - point1.y]
-    return Math.sqrt dx*dx + dy*dy
+    @segments = @segment bounds, @stroke, @states, @loops
 
   draw: (canvas) =>
     for i in [0...@stroke.length]
@@ -97,55 +182,14 @@ class Stroke
         # Add a special case for a loop that contains the entire stroke.
         skip_v = j == stroke.length - 2 and v > 1
         if point and dir*u < (dir - 1)/2 and (0 <= v < 1 or skip_v) and
-            (@distance stroke[i], point) < @loop_tolerance
-          if i == 0 then loops.unshift [i, j] else loops.push [j - 1, i]
+            (Util.distance stroke[i], point) < @loop_tolerance
+          if i == 0 then loops.unshift [i, j] else loops.push [j - 1, i + 1]
           break
         j += dir
     loops
 
-  find_intersection: (s1, t1, s2, t2) =>
-    # Finds the intersection between rays s1 -> t1 and s2 -> t2, where the
-    # ray a -> b is the ray that begins at a and passes through b.
-    #
-    # Returns a list [u, v, point], where point is the intersection point
-    # and u and v are the fraction of the distance along ray1 and ray2 that
-    # the point occurs. Return [und, und, und] if no intersection can be found.
-    d1 = {x: t1.x - s1.x, y: t1.y - s1.y}
-    d2 = {x: t2.x - s2.x, y: t2.y - s2.y}
-    [dx, dy] = [s2.x - s1.x, s2.y - s1.y]
-    det = (d1.x*d2.y - d1.y*d2.x)
-    if not det
-      # Handle degenerate cases where we may still have an intersection.
-      # If ray1 has positive length and ray2's start occurs on it, we will
-      # return a valid intersection.
-      big = (x) -> (Math.abs x) > 0.001
-      if ((big d1.x) or (big d1.y)) and not big dx*d1.y - dy*d1.x
-        dim = if big d1.x then 'x' else 'y'
-        u = (s2[dim] - s1[dim])/d1[dim]
-        return [u, 0, s2]
-      return [undefined, undefined, undefined]
-    u = (dx*d2.y - dy*d2.x)/det
-    v = (dx*d1.y - dy*d1.x)/det
-    [u, v, {x: s1.x + d1.x*u, y: s1.y + d1.y*u}]
-
   find_stroke_intersection: (stroke, i, j) =>
-    @find_intersection stroke[i], stroke[i + 1], stroke[j], stroke[j + 1]
-
-  get_angle: (point1, point2) =>
-    # Returns the angle of the line formed between two points.
-    Math.atan2 point2.y - point1.y, point2.x - point1.x
-
-  get_angles: (stroke) =>
-    # Takes an n-point stroke of n elements and returns an (n - 2)-element
-    # list of angles between adjacent points. This method will throw an error
-    # if the stroke has <= 2 points.
-    result = []
-    last_angle = undefined
-    angle = @get_angle stroke[0], stroke[1]
-    for i in [1...stroke.length - 1]
-      [last_angle, angle] = [angle, @get_angle stroke[i], stroke[i + 1]]
-      result.push (angle - last_angle + 3*Math.PI) % (2*Math.PI) - Math.PI
-    result
+    Util.intersection stroke[i], stroke[i + 1], stroke[j], stroke[j + 1]
 
   get_state_color: (state) =>
     {0: '#000', 1: '#C00', 2: '#080'}[state]
@@ -162,55 +206,44 @@ class Stroke
     if size > @hook_count
       # Remove hooks at the beginning of the stroke.
       for i in [0...@hook_count]
-        if (@distance stroke[0], stroke[i]) > @hook_length
+        if (Util.distance stroke[0], stroke[i]) > @hook_length
           break
       for j in [0...i]
         states[j] = states[i]
       # Remove hooks at the end of the stroke.
       for i in [size - 1..size - @hook_count]
-        if (@distance stroke[size - 1], stroke[i]) > @hook_length
+        if (Util.distance stroke[size - 1], stroke[i]) > @hook_length
           break
       for j in [size - 1...i]
         states[j] = states[i]
     states
 
-  rescale: (bounds, point) =>
-    # Takes a list of points within the given bounds, and rescales them so that
-    # the points are bounded within the unit square.
-    [min, max] = bounds
-    x: (point.x - min.x)/(max.x - min.x)
-    y: (point.y - min.y)/(max.y - min.y)
+  segment: (stroke, states, loops) =>
+    # Returns a list of segments that (almost) partition the stroke.
+    segments = @segment_states stroke, states
+    segments = @merge_segments segments, stroke, states
 
-  smooth: (values, iterations) =>
-    # Runs a number of smoothing iterations on the list. In each iteration,
-    # each value in the list is averaged with its neightbors.
-    for i in [0...iterations]
-      result = []
-      for i in [0...values.length]
-        samples = ( \
-          values[i + j] for j in [-1..1] \
-          when 0 <= i + j < values.length
-        )
-        result.push (@sum samples)/samples.length
-      values = result
-    values
+  segment_states: (stroke, states) =>
+    # Returns the list of segments based on on state data.
+    result = []
+    for state, i in states
+      if result.length and state == states[result[result.length - 1][0]]
+        result[result.length - 1][1] = i
+      else
+        result.push [i, i]
+    result
 
-  smooth_stroke: (stroke, iterations) =>
-    # Smooths the list of points coordinate-by-coordinate.
-    x_values = @smooth (point.x for point in stroke), iterations
-    y_values = @smooth (point.y for point in stroke), iterations
-    return ({x: x_values[i], y: y_values[i]} for i in [0...stroke.length])
-
-  sum: (values) ->
-    # Return the sum of elements in the list.
-    total = 0
-    for value in values
-      total += value
-    total
+  merge_segments: (segments, stroke, states) =>
+    result = []
+    for segment, i in segments
+      if i == 0 and 0 < i < segments.length - 1 and
+          segments[i - 1].state == segments[i - 2].state != 0
+        if segment.get_length > 0
+          return true
 
   viterbi: (angles) =>
     # Finds the maximum-likelihood state list of an HMM for the list of angles.
-    angles = @smooth angles, @angle_smoothing
+    angles = Util.smooth angles, @angle_smoothing
     # Build a memo, where memo[i][state] is a pair [best_log, last_state],
     # where best_log is the greatest possible log probability assigned to
     # any chain that ends at state `state` at index i, and last_state is the
@@ -269,7 +302,7 @@ class @Feature extends Canvas
   run: =>
     @fill 'white'
     strokes = @other.strokes
-    bounds = Stroke.get_bounds [].concat.apply [], strokes
+    bounds = Util.bounds [].concat.apply [], strokes
     strokes = (new Stroke bounds, stroke for stroke in strokes)
     for stroke in strokes
       stroke.draw @
