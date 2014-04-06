@@ -97,7 +97,7 @@ class Stroke
         # Add a special case for a loop that contains the entire stroke.
         skip_v = j == stroke.length - 2 and v > 1
         if point and dir*u < (dir - 1)/2 and (0 <= v < 1 or skip_v) and
-            (@distance stroke[i], stroke[j]) < @loop_tolerance
+            (@distance stroke[i], point) < @loop_tolerance
           if i == 0 then loops.unshift [i, j] else loops.push [j - 1, i]
           break
         j += dir
