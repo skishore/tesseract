@@ -8,7 +8,11 @@
 
     <link rel="stylesheet" type="text/css" href="/static/css/style.css" />
 
+    <!-- Programmatically generated Javascript files. -->
     <script type="text/javascript" src="/language_data.js"></script>
+    <script type="text/javascript" src="/train_test.js"></script>
+
+    <!-- Static Javascript files. -->
     <script type="text/javascript" src="/static/javascript/canvas.js"></script>
     <script type="text/javascript" src="/static/javascript/feature.js"></script>
     <script type="text/javascript" src="/static/javascript/mouse.js"></script>
@@ -23,7 +27,11 @@
         <div class="ocr-result"></div>
       </div>
     </div>
-    <canvas class="feature"></canvas>
+    <div class="classification wrapper">
+      <div class="train" data-dataset="train">R</div>
+      <canvas class="feature"></canvas>
+      <div class="test" data-dataset="test">T</div>
+    </div>
     <div class="square wrapper">
       <div class="inner sketchpad-container">
         <canvas class="sketchpad"></canvas>

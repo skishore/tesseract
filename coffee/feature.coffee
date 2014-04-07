@@ -124,6 +124,15 @@ class Segment
     if @j != other.i then console.log 'Unexpected merge!'
     @reset @i, other.j, @closed or other.closed
 
+  serialize: =>
+    start: @stroke[@i]
+    end: @stroke[@j - 1]
+    count: @j - @i
+    bounds: @bounds
+    length: @length
+    closed: @closed
+    state: @state
+
 
 class Stroke
   # The initial number of smoothing iterations applied to the stroke.
@@ -364,21 +373,20 @@ class Stroke
     do result.reverse
     result
 
+  serialize: =>
+    (do segment.serialize for segment in @segments)
+
 
 class @Feature extends Canvas
   border: 0.1
   line_width: 1
   point_width: 4
 
-  constructor: (@elt, @other) ->
+  constructor: (@elt) ->
+    parent = do elt.parent
+    parent.find('.test, .train').width (do parent.width - do @elt.width)/2 - 1
     super @elt
     window.feature = @
-    window.Stroke = Stroke
-    do @run
-
-  rescale: (point) =>
-    x: ((1 - 2*@border)*point.x + @border)*@context.canvas.width
-    y: ((1 - 2*@border)*point.y + @border)*@context.canvas.height
 
   draw_line: (point1, point2) =>
     @context.lineWidth = @line_width
@@ -395,10 +403,21 @@ class @Feature extends Canvas
     super (@rescale point1), (@rescale point2)
     @context.setLineDash []
 
-  run: =>
+  redraw: (data) =>
+    @run data or []
     @fill 'white'
-    strokes = @other.strokes
-    bounds = Util.bounds [].concat.apply [], strokes
-    strokes = (new Stroke bounds, stroke for stroke in strokes)
-    for stroke in strokes
+    for stroke in @strokes
       stroke.draw @
+
+  rescale: (point) =>
+    x: ((1 - 2*@border)*point.x + @border)*@context.canvas.width
+    y: ((1 - 2*@border)*point.y + @border)*@context.canvas.height
+
+  run: (data) =>
+    @data = data.slice 0
+    bounds = Util.bounds [].concat.apply [], data
+    @strokes = (new Stroke bounds, stroke for stroke in data)
+
+  serialize: =>
+    data: @data
+    strokes: (do stroke.serialize for stroke in @strokes)

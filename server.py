@@ -19,6 +19,10 @@ from tornado.web import (
 )
 
 import languages
+from model import Model
+
+
+model = Model()
 
 
 def ocr(language, base64_image):
@@ -71,6 +75,23 @@ class OCRHandler(RequestHandler):
     })
 
 
+class SaveHandler(RequestHandler):
+  def post(self):
+    data_json = self.get_argument('data_json', default=None, strip=False)
+    model.insert(**json.loads(data_json))
+
+
+class TrainTestHandler(RequestHandler):
+  def get(self):
+    self.set_header('Content-Type', 'text/javascript')
+    (train_data, test_data) = model.get_train_and_test_data()
+    self.write('''
+        TRAIN_DATA = %s;
+        TEST_DATA = %s;
+      ''' % (json.dumps(train_data), json.dumps(test_data))
+    )
+
+
 if __name__ == '__main__':
   define('port', default=8000, help='Port to listen on', type=int)
   define('debug', default=False, help='Run in debug mode', type=bool)
@@ -80,6 +101,8 @@ if __name__ == '__main__':
     (r'/', IndexHandler),
     (r'/language_data.js', LanguagesHandler),
     (r'/ocr', OCRHandler),
+    (r'/save', SaveHandler),
+    (r'/train_test.js', TrainTestHandler),
   ]
   static_handler_class = DebugHandler if options.debug else StaticFileHandler
   base_path = os.path.dirname(__file__)

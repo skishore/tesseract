@@ -1,4 +1,5 @@
 .sass-cache
+*.db
 *.pyc
 *.swp
 static/css/*

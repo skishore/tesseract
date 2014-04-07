@@ -35,17 +35,20 @@ window.onload = ->
   for elt in [ocr_parent, controls, hint]
     fix_line_height elt
 
+  # Fix font size for the train/test buttons.
+  $('.train, .test').css 'font-size', $('.prev').css 'font-size'
+
   # Put up a random hint. We rolled a die to get this one.
   render_unichr (get_next_letter 1), hint
 
   mouse = new Mouse
   sketchpad = new Sketchpad $('.sketchpad'), mouse
-  feature = new Feature $('.feature'), sketchpad
-  do feature.run
+  feature = new Feature $('.feature')
+  do feature.redraw
 
   sketchpad.changed = (version) =>
     if mouse.touch_enabled or true
-      do feature.run
+      feature.redraw sketchpad.strokes
     return
     ocr_parent.stop().animate backgroundColor: '#CCC', DELAY
     buffer.fill 'white'
@@ -65,7 +68,7 @@ window.onload = ->
       if sketchpad.last_version == version
         ocr_parent.stop().animate backgroundColor: '#EEE', DELAY
         ocr_result.text ''
-    do feature.run
+    do feature.redraw
 
   reset.click clear
 
@@ -76,3 +79,11 @@ window.onload = ->
   next.click =>
     render_unichr (get_next_letter 1), hint
     do clear
+
+  $('.train, .test').click ->
+    data = do feature.serialize
+    if data.strokes.length
+      data.dataset = $(@).data 'dataset'
+      data.unichr = ALPHABET[index]
+      $.post '/save', data_json: JSON.stringify data
+      next.trigger 'click'

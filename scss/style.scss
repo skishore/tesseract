@@ -81,10 +81,25 @@ body {
     width: 256px;
   }
 
-  .feature {
-    border: 1px dotted black;
-    height: 128px;
-    width: 128px;
+  .classification {
+    height: 130px;
+
+    .train, .test {
+      background-color: #CFC;
+      cursor: pointer;
+      float: left;
+      height: 130px;
+      line-height: 130px;
+      user-select: none;
+    }
+
+    .feature {
+      border: 1px dotted black;
+      float: left;
+      height: 128px;
+      margin: 0 auto;
+      width: 128px;
+    }
   }
 }
 
