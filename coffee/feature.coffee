@@ -1,123 +1,39 @@
-class Util
-  @angle: (point1, point2) ->
-    # Returns the angle of the line formed between two points.
-    Math.atan2 point2.y - point1.y, point2.x - point1.x
-
-  @angles: (stroke) ->
-    # Takes an n-point stroke of n elements and returns an (n - 2)-element
-    # list of angles between adjacent points. This method will throw an error
-    # if the stroke has <= 2 points.
-    result = []
-    last_angle = undefined
-    angle = Util.angle stroke[0], stroke[1]
-    for i in [1...stroke.length - 1]
-      [last_angle, angle] = [angle, Util.angle stroke[i], stroke[i + 1]]
-      result.push (angle - last_angle + 3*Math.PI) % (2*Math.PI) - Math.PI
-    result
-
-  @bounds: (stroke) ->
-    # Returns a [min, max] pair of corners of a box bounding the points.
-    x_values = (point.x for point in stroke)
-    y_values = (point.y for point in stroke)
-    return [
-      {x: (Math.min.apply 0, x_values), y: (Math.min.apply 0, y_values)},
-      {x: (Math.max.apply 0, x_values), y: (Math.max.apply 0, y_values)},
-    ]
-
-  @distance: (point1, point2) ->
-    # Return the Euclidean distance between two points.
-    [dx, dy] = [point2.x - point1.x, point2.y - point1.y]
-    return Math.sqrt dx*dx + dy*dy
-
-  @intersection: (s1, t1, s2, t2) ->
-    # Finds the intersection between rays s1 -> t1 and s2 -> t2, where the
-    # ray a -> b is the ray that begins at a and passes through b.
-    #
-    # Returns a list [u, v, point], where point is the intersection point
-    # and u and v are the fraction of the distance along ray1 and ray2 that
-    # the point occurs. Return [und, und, und] if no intersection can be found.
-    d1 = {x: t1.x - s1.x, y: t1.y - s1.y}
-    d2 = {x: t2.x - s2.x, y: t2.y - s2.y}
-    [dx, dy] = [s2.x - s1.x, s2.y - s1.y]
-    det = (d1.x*d2.y - d1.y*d2.x)
-    if not det
-      # Handle degenerate cases where we may still have an intersection.
-      # If ray1 has positive length and ray2's start occurs on it, we will
-      # return a valid intersection.
-      big = (x) -> (Math.abs x) > 0.001
-      if ((big d1.x) or (big d1.y)) and not big dx*d1.y - dy*d1.x
-        dim = if big d1.x then 'x' else 'y'
-        u = (s2[dim] - s1[dim])/d1[dim]
-        return [u, 0, s2]
-      return [undefined, undefined, undefined]
-    u = (dx*d2.y - dy*d2.x)/det
-    v = (dx*d1.y - dy*d1.x)/det
-    [u, v, {x: s1.x + d1.x*u, y: s1.y + d1.y*u}]
-
-  @rescale: (bounds, point) ->
-    # Takes a list of points within the given bounds, and rescales them so that
-    # the points are bounded within the unit square.
-    [min, max] = bounds
-    x: (point.x - min.x)/(max.x - min.x)
-    y: (point.y - min.y)/(max.y - min.y)
-
-  @smooth: (values, iterations) ->
-    # Runs a number of smoothing iterations on the list. In each iteration,
-    # each value in the list is averaged with its neightbors.
-    for i in [0...iterations]
-      result = []
-      for i in [0...values.length]
-        samples = ( \
-          values[i + j] for j in [-1..1] \
-          when 0 <= i + j < values.length
-        )
-        result.push (Util.sum samples)/samples.length
-      values = result
-    values
-
-  @smooth_stroke: (stroke, iterations) ->
-    # Smooths the list of points coordinate-by-coordinate.
-    x_values = Util.smooth (point.x for point in stroke), iterations
-    y_values = Util.smooth (point.y for point in stroke), iterations
-    return ({x: x_values[i], y: y_values[i]} for i in [0...stroke.length])
-
-  @sum: (values) ->
-    # Return the sum of elements in the list.
-    total = 0
-    for value in values
-      total += value
-    total
-
-
 class Segment
-  length_threshold: 0.4
+  length_threshold: 0.25
 
-  constructor: (@stroke, @state, i, j, closed) ->
-    @reset i, j, closed
+  constructor: (@stroke, @state, i, j, closed, dot) ->
+    @reset i, j, closed, dot
 
-  reset: (@i, @j, closed) =>
+  reset: (@i, @j, closed, dot) =>
     @bounds = Util.bounds @stroke.slice i, j
     @length = if i >= j then 0 else
         Util.sum (Util.distance @stroke[k], @stroke[k + 1] for k in [i...j - 1])
+    # Compute signals for this segment. Minor segments on training data are
+    # ignored by scoring, but can still be matched with major segments as test.
     @closed = if closed then true else false
-    # Compute signals for this segment.
-    @minor = @length < @length_threshold
+    @dot = if dot then true else false
+    @minor = @length < @length_threshold and not @dot
     @color = do @get_color
 
   draw: (canvas) =>
+    if @dot
+      canvas.context.strokeStyle = '#00F'
+      canvas.draw_point
+        x: (@bounds[0].x + @bounds[1].x)/2
+        y: (@bounds[0].y + @bounds[1].y)/2
+      return
     canvas.line_width = 1
     if not @minor
       canvas.draw_rect @bounds[0], @bounds[1]
       canvas.line_width = 2
     canvas.context.strokeStyle = @color
     for k in [@i...@j]
-      #canvas.draw_point @stroke[k]
       if k + 1 < @j
         canvas.draw_line @stroke[k], @stroke[k + 1]
 
   get_color: =>
     if @closed
-      return {1: '#808', 2: '#00C'}[@state]
+      return {1: '#808', 2: '#0AA'}[@state]
     return {0: '#000', 1: '#C00', 2: '#080'}[@state]
 
   merge: (other) =>
@@ -125,18 +41,23 @@ class Segment
     @reset @i, other.j, @closed or other.closed
 
   serialize: =>
+    bounds: @bounds
+    count: @j - @i
     start: @stroke[@i]
     end: @stroke[@j - 1]
-    count: @j - @i
-    bounds: @bounds
-    length: @length
     closed: @closed
+    dot: @dot
+    length: @length
+    minor: @minor
     state: @state
 
 
 class Stroke
   # The initial number of smoothing iterations applied to the stroke.
   stroke_smoothing: 3
+  # Thresholds for marking a stroke as a dot.
+  area_threshold: 0.01
+  perimeter_threshold: 0.4
 
   # Constants that control the hidden Markov model used to decompose strokes.
   # State 0 -> straight, state 1 -> clockwise, state 2 -> counterclockwise.
@@ -174,22 +95,25 @@ class Stroke
   constructor: (bounds, stroke) ->
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
     @stroke = (Util.rescale bounds, point for point in stroke)
-    if @stroke.length > 2
+    bounds = Util.bounds @stroke
+    if @stroke.length > 2 and @check_size bounds
       states = @viterbi Util.angles @stroke
       @states = @postprocess @stroke, states
       @loops = @find_loops @stroke, @states
+      @segments = @segment @stroke, @states, @loops
     else
       @states = (0 for point in @stroke)
       @loops = []
-    @segments = @segment @stroke, @states, @loops
+      @segments = [new Segment @stroke, @states, 0, @stroke.length, true, true]
+
+  check_size: (bounds) =>
+    # Return true if this stroke is big enough to not be considered a dot.
+    (Util.area bounds[0], bounds[1]) > @area_threshold or
+    (Util.perimeter bounds[0], bounds[1]) > @perimeter_threshold
 
   draw: (canvas) =>
     for segment in @segments
       segment.draw canvas
-    for [i, j] in @loops
-      for k in [i...j - 1]
-        canvas.context.strokeStyle = '#00C'
-        #canvas.draw_line @stroke[k], @stroke[k + 1]
 
   find_loops: (stroke, states) =>
     loops = []

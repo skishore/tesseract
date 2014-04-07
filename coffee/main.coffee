@@ -86,5 +86,5 @@ window.onload = ->
     if data.strokes.length
       data.dataset = $(@).data 'dataset'
       data.unichr = ALPHABET[index]
-      $.post '/save', data_json: JSON.stringify data
-      next.trigger 'click'
+      #$.post '/save', data_json: JSON.stringify data
+      #next.trigger 'click'
