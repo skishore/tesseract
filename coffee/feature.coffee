@@ -90,7 +90,7 @@ class Util
 
 
 class Segment
-  length_threshold: 0.2
+  length_threshold: 0.4
 
   constructor: (@stroke, @state, i, j, closed) ->
     @reset i, j, closed
@@ -281,10 +281,12 @@ class Stroke
 
   split_loop_segments: (segments, stroke, states, loops) =>
     result = []
-    push_segment = (segment) =>
-      if result.length and
-          result[result.length - 1].closed and not segment.closed and
-          segment.length < @split_threshold*result[result.length - 1].length
+    dominates = (segment1, segment2) =>
+      segment1.closed and not segment2.closed and
+      (segment2.state == 0 or segment2.state == segment1.state) and
+      segment2.length < @split_threshold*segment1.length
+    push_segment = (segment) ->
+      if result.length and dominates result[result.length - 1], segment
         result[result.length - 1].merge segment
       else
         result.push segment
@@ -311,7 +313,7 @@ class Stroke
       [before, after] = [overlaps[0], overlaps[overlaps.length - 1]]
       prev_segment = new Segment stroke, before.state, before.i, min
       loop_segment = new Segment stroke, state, min, max, true
-      if prev_segment.length < @split_threshold*loop_segment.length
+      if dominates loop_segment, prev_segment
         prev_segment.state = loop_segment.state
         prev_segment.merge loop_segment
         push_segment prev_segment
