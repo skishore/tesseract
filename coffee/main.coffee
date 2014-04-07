@@ -1,4 +1,5 @@
 DELAY = 0
+DEMO_MODE = true
 
 LANGUAGE = 'kan'
 
@@ -44,7 +45,7 @@ window.onload = ->
   mouse = new Mouse
   sketchpad = new Sketchpad $('.sketchpad'), mouse
   feature = new Feature $('.feature')
-  do feature.redraw
+  feature.redraw if DEMO_MODE then TRAIN_DATA[index].data else undefined
 
   sketchpad.changed = (version) =>
     if mouse.touch_enabled or true
@@ -68,7 +69,7 @@ window.onload = ->
       if sketchpad.last_version == version
         ocr_parent.stop().animate backgroundColor: '#EEE', DELAY
         ocr_result.text ''
-    do feature.redraw
+    feature.redraw if DEMO_MODE then TRAIN_DATA[index].data else undefined
 
   reset.click clear
 

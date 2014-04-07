@@ -145,7 +145,9 @@ class Stroke
   sharp_threshold = 0.1*Math.PI
   pdfs: {
     0: (angle) ->
-      if Math.abs(angle) > threshold then 0.05 else 0.9
+      magnitude = Math.abs angle
+      if magnitude < threshold then 0.9
+      else if magnitude < sharp_threshold then 0.05 else 0.001
     1: (angle) ->
       if angle > threshold then 0.8
       else if angle > -sharp_threshold then 0.1 else 0.001
