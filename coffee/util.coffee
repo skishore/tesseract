@@ -64,8 +64,8 @@ class @Util
     # Takes a list of points within the given bounds, and rescales them so that
     # the points are bounded within the unit square.
     [min, max] = bounds
-    x: (point.x - min.x)/(max.x - min.x)
-    y: (point.y - min.y)/(max.y - min.y)
+    x: (max.x - min.x) and (point.x - min.x)/(max.x - min.x)
+    y: (max.y - min.y) and (point.y - min.y)/(max.y - min.y)
 
   @smooth: (values, iterations) ->
     # Runs a number of smoothing iterations on the list. In each iteration,

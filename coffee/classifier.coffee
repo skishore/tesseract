@@ -68,6 +68,8 @@ class @Classifier
     endpoint_x_penalty = -0.4
     endpoint_y_penalty = -0.4
     length_penalty = -1.0
+    closed_penalty = -10.0
+    dot_penalty = -20.0
 
     score = 0
     # Apply the state penalties, multiplied by length.
@@ -87,6 +89,12 @@ class @Classifier
     score += endpoint_y_penalty*@sq_diff a.end.y, b.end.y
     # Apply the length penalties.
     score += length_penalty*@sq_diff a.length, b.length
+    # Apply the closed and dot penalties.
+    if a.closed != b.closed
+      score += closed_penalty
+    if a.dot != b.dot
+      score += dot_penalty
+    score
 
   sq_diff: (x, y) ->
     (x - y)*(x - y)
