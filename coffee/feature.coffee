@@ -43,8 +43,8 @@ class Segment
   serialize: =>
     bounds: @bounds
     count: @j - @i
-    start: @stroke[@i]
-    end: @stroke[@j - 1]
+    start: Util.rescale @bounds, @stroke[@i]
+    end:  Util.rescale @bounds, @stroke[@j - 1]
     closed: @closed
     dot: @dot
     length: @length

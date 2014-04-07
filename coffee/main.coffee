@@ -47,9 +47,12 @@ window.onload = ->
   feature = new Feature $('.feature')
   feature.redraw if DEMO_MODE then TRAIN_DATA[index].data else undefined
 
+  classifier = new Classifier feature, TRAIN_DATA
+
   sketchpad.changed = (version) =>
-    if mouse.touch_enabled or true
-      feature.redraw sketchpad.strokes
+    feature.redraw sketchpad.strokes
+    [i, sample] = classifier.classify do feature.serialize
+    render_unichr sample.unichr, $('.test')
     return
     ocr_parent.stop().animate backgroundColor: '#CCC', DELAY
     buffer.fill 'white'
