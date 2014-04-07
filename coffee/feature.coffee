@@ -97,16 +97,18 @@ class Segment
 
   reset: (@i, @j, closed) =>
     @bounds = Util.bounds @stroke.slice i, j
-    @length = Util.sum (
-        Util.distance @stroke[k], @stroke[k + 1] for k in [i...j - 1])
+    @length = if i >= j then 0 else
+        Util.sum (Util.distance @stroke[k], @stroke[k + 1] for k in [i...j - 1])
     @closed = if closed then true else false
     # Compute signals for this segment.
     @minor = @length < @length_threshold
     @color = do @get_color
 
   draw: (canvas) =>
+    canvas.line_width = 1
     if not @minor
       canvas.draw_rect @bounds[0], @bounds[1]
+      canvas.line_width = 2
     canvas.context.strokeStyle = @color
     for k in [@i...@j]
       #canvas.draw_point @stroke[k]
@@ -114,6 +116,8 @@ class Segment
         canvas.draw_line @stroke[k], @stroke[k + 1]
 
   get_color: =>
+    if @closed
+      return {1: '#808', 2: '#00C'}[@state]
     return {0: '#000', 1: '#C00', 2: '#080'}[@state]
 
   merge: (other) =>
@@ -154,6 +158,7 @@ class Stroke
 
   # Thresholds controlling stroke segmentation during preprocessing.
   merge_threshold: 1.0
+  split_threshold: 0.5
 
   constructor: (bounds, stroke) ->
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
@@ -244,7 +249,7 @@ class Stroke
     # Returns a list of segments that (almost) partition the stroke.
     segments = @segment_states stroke, states
     segments = @merge_straight_segments segments, stroke, states
-    #segments = @split_loop_segments segments, stroke, states, loops
+    segments = @split_loop_segments segments, stroke, states, loops
     segments
 
   segment_states: (stroke, states) =>
@@ -276,15 +281,22 @@ class Stroke
 
   split_loop_segments: (segments, stroke, states, loops) =>
     result = []
-    [i, j] = 0
+    push_segment = (segment) =>
+      if result.length and
+          result[result.length - 1].closed and not segment.closed and
+          segment.length < @split_threshold*result[result.length - 1].length
+        result[result.length - 1].merge segment
+      else
+        result.push segment
+    [i, j] = [0, 0]
     while i < segments.length and j < loops.length
-      dot = loops[j]
-      while i < segments.length and segments[i].j < dot.i
-        result.push segments[i]
+      [min, max] = loops[j]
+      while segments[i].j < min
+        push_segment segments[i]
         i += 1
       # Get the list of segments that overlap loop `dot`.
       overlaps = []
-      while i < segments.length and segments[i].j < dot.j
+      while segments[i].j < max
         overlaps.push segments[i]
         i += 1
       overlaps.push segments[i]
@@ -292,12 +304,27 @@ class Stroke
       state_1_minus_state_2 = 0
       for overlap in overlaps
         if overlap.state
-          count = (Math.min dot.j, overlap.j) - (Math.max dot.i, overlap.i)
+          count = (Math.min max, overlap.j) - (Math.max min, overlap.i)
           state_1_minus_state_2 += if overlap.state == 1 then count else -count
       state = if state_1_minus_state_2 > 0 then 1 else 2
-      # Figure out if we should include 
+      # Construct a list of three segments that will be used to cover the loop.
+      [before, after] = [overlaps[0], overlaps[overlaps.length - 1]]
+      prev_segment = new Segment stroke, before.state, before.i, min
+      loop_segment = new Segment stroke, state, min, max, true
+      if prev_segment.length < @split_threshold*loop_segment.length
+        prev_segment.state = loop_segment.state
+        prev_segment.merge loop_segment
+        push_segment prev_segment
+      else
+        push_segment prev_segment
+        push_segment loop_segment
+      if after.j > max
+        segments[i] = new Segment stroke, after.state, max, after.j
+      else
+        i += 1
+      j += 1
     while i < segments.length
-      result.push segments[i]
+      push_segment segments[i]
       i += 1
     result
 
