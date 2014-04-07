@@ -40,5 +40,11 @@ class @Canvas
     do @context.stroke
     @version += 1
 
+  draw_rect: (start, end) =>
+    do @context.beginPath
+    @context.rect start.x, start.y, end.x - start.x, end.y - start.y
+    do @context.stroke
+    @version += 1
+
   get_base64_image: =>
     do @context.canvas.toDataURL

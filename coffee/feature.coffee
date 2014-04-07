@@ -90,16 +90,35 @@ class Util
 
 
 class Segment
-  constructor: (@stroke, @state, @i, @j) ->
-    @count = j - i
+  length_threshold: 0.2
+
+  constructor: (@stroke, @state, i, j, closed) ->
+    @reset i, j, closed
+
+  reset: (@i, @j, closed) =>
+    @bounds = Util.bounds @stroke.slice i, j
     @length = Util.sum (
-        Util.distance stroke[k], stroke[k + 1] for k in [i...j - 1])
+        Util.distance @stroke[k], @stroke[k + 1] for k in [i...j - 1])
+    @closed = if closed then true else false
+    # Compute signals for this segment.
+    @minor = @length < @length_threshold
+    @color = do @get_color
+
+  draw: (canvas) =>
+    if not @minor
+      canvas.draw_rect @bounds[0], @bounds[1]
+    canvas.context.strokeStyle = @color
+    for k in [@i...@j]
+      #canvas.draw_point @stroke[k]
+      if k + 1 < @j
+        canvas.draw_line @stroke[k], @stroke[k + 1]
+
+  get_color: =>
+    return {0: '#000', 1: '#C00', 2: '#080'}[@state]
 
   merge: (other) =>
     if @j != other.i then console.log 'Unexpected merge!'
-    @count += other.count
-    @j = other.j
-    @length += other.length
+    @reset @i, other.j, @closed or other.closed
 
 
 class Stroke
@@ -134,7 +153,6 @@ class Stroke
   hook_length: 0.1
 
   # Thresholds controlling stroke segmentation during preprocessing.
-  segment_length_threshold: 0.2
   merge_threshold: 1.0
 
   constructor: (bounds, stroke) ->
@@ -151,11 +169,7 @@ class Stroke
 
   draw: (canvas) =>
     for segment in @segments
-      canvas.context.strokeStyle = @get_state_color segment.state
-      for i in [segment.i...segment.j]
-        #canvas.draw_point @stroke[i]
-        if i + 1 < segment.j
-          canvas.draw_line @stroke[i], @stroke[i + 1]
+      segment.draw canvas
     for [i, j] in @loops
       for k in [i...j - 1]
         canvas.context.strokeStyle = '#00C'
@@ -202,9 +216,6 @@ class Stroke
   find_stroke_intersection: (stroke, i, j) =>
     Util.intersection stroke[i], stroke[i + 1], stroke[j], stroke[j + 1]
 
-  get_state_color: (state) =>
-    {0: '#000', 1: '#C00', 2: '#080'}[state]
-
   postprocess: (stroke, states) =>
     # Takes an (n - 2)-element list of states and extends it to a list of n
     # states, one for each stroke point. Also does some final cleanup.
@@ -232,7 +243,8 @@ class Stroke
   segment: (stroke, states, loops) =>
     # Returns a list of segments that (almost) partition the stroke.
     segments = @segment_states stroke, states
-    segments = @merge_segments segments, stroke, states
+    segments = @merge_straight_segments segments, stroke, states
+    #segments = @split_loop_segments segments, stroke, states, loops
     segments
 
   segment_states: (stroke, states) =>
@@ -245,7 +257,7 @@ class Stroke
         result.push [i, i + 1]
     (new Segment stroke, states[i], i, j for [i, j] in result)
 
-  merge_segments: (segments, stroke, states) =>
+  merge_straight_segments: (segments, stroke, states) =>
     result = []
     i = 0
     while i < segments.length
@@ -259,6 +271,33 @@ class Stroke
             i += 2
             continue
       result.push segment
+      i += 1
+    result
+
+  split_loop_segments: (segments, stroke, states, loops) =>
+    result = []
+    [i, j] = 0
+    while i < segments.length and j < loops.length
+      dot = loops[j]
+      while i < segments.length and segments[i].j < dot.i
+        result.push segments[i]
+        i += 1
+      # Get the list of segments that overlap loop `dot`.
+      overlaps = []
+      while i < segments.length and segments[i].j < dot.j
+        overlaps.push segments[i]
+        i += 1
+      overlaps.push segments[i]
+      # Check if this loop is a clockwise or counterclockwise loop.
+      state_1_minus_state_2 = 0
+      for overlap in overlaps
+        if overlap.state
+          count = (Math.min dot.j, overlap.j) - (Math.max dot.i, overlap.i)
+          state_1_minus_state_2 += if overlap.state == 1 then count else -count
+      state = if state_1_minus_state_2 > 0 then 1 else 2
+      # Figure out if we should include 
+    while i < segments.length
+      result.push segments[i]
       i += 1
     result
 
@@ -312,13 +351,20 @@ class @Feature extends Canvas
     x: ((1 - 2*@border)*point.x + @border)*@context.canvas.width
     y: ((1 - 2*@border)*point.y + @border)*@context.canvas.height
 
-  draw_line: (point1, point2, color) =>
+  draw_line: (point1, point2) =>
     @context.lineWidth = @line_width
     super (@rescale point1), (@rescale point2)
 
   draw_point: (point, color) =>
     @context.lineWidth = @point_width
     super @rescale point
+
+  draw_rect: (point1, point2) =>
+    @context.lineWidth = @line_width
+    @context.setLineDash [1, 2]
+    @context.strokeStyle = 'black'
+    super (@rescale point1), (@rescale point2)
+    @context.setLineDash []
 
   run: =>
     @fill 'white'
