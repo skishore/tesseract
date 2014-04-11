@@ -67,6 +67,9 @@ class @Util
     x: (max.x - min.x) and (point.x - min.x)/(max.x - min.x)
     y: (max.y - min.y) and (point.y - min.y)/(max.y - min.y)
 
+  @sign: (x) ->
+    if x then (if x < 0 then -1 else 1) else 0
+
   @smooth: (values, iterations) ->
     # Runs a number of smoothing iterations on the list. In each iteration,
     # each value in the list is averaged with its neightbors.

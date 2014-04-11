@@ -265,9 +265,25 @@ class Stroke
       i += 1
     result
 
+  handle_180s: (angles) =>
+    # If an angle is sufficiently close to 180 degrees, and if it is the same
+    # sign as the two angles, flip its sign. This will cause our Markov model
+    # detect a one time-step long state-change at the angle.
+    #
+    # For now, an angle is only close to 180 degrees if it equals +/-PI.
+    for i in [1...angles.length - 1]
+      if (Math.abs angles[i]) == Math.PI
+        signs = ((Util.sign angles[j]) for j in [i - 1, i, i + 1])
+        if signs[0] == signs[1] == signs[2]
+          angles[i] *= -1
+    angles
+
   viterbi: (angles) =>
     # Finds the maximum-likelihood state list of an HMM for the list of angles.
-    angles = Util.smooth angles, @angle_smoothing
+    #
+    # Start by checking for any angle that are close enough to PI that they are
+    # neither cw nor ccw. Then smooth the rest of the angles.
+    angles = Util.smooth (@handle_180s angles), @angle_smoothing
     # Build a memo, where memo[i][state] is a pair [best_log, last_state],
     # where best_log is the greatest possible log probability assigned to
     # any chain that ends at state `state` at index i, and last_state is the
