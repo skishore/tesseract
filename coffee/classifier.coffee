@@ -58,7 +58,10 @@ class @Classifier
       test_matches.push [best_i, best_score]
     test_score = Util.sum (score for [i, score] in test_matches)
     # Return the final weighted score.
-    sample_weight*sample_score + test_weight*test_score
+    #
+    # We divide this score by the number of sample segments, because we don't
+    # want to penalize scores for complex characters.
+    (sample_weight*sample_score + test_weight*test_score)/sample_segments.length
 
   score_segments: (a, b) =>
     minor_state_penalty = -1.0
