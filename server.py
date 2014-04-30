@@ -113,4 +113,6 @@ if __name__ == '__main__':
     template_path=os.path.join(base_path, 'templates'),
   )
   app.listen(options.port)
+  if options.debug:
+    print 'Listening on port %s...' % (options.port,)
   IOLoop.instance().start()
