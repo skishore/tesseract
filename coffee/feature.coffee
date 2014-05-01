@@ -183,6 +183,7 @@ class Stroke
       if segment.closed
         type = if segment.minor then 'cusp' else 'loop'
         points.push new Point [@stroke[segment.i], @stroke[segment.j - 1]], type
+        # TODO(skishore): Detect cusps when they occur within loops...
       else if segment.minor
         if segment.state != 0
           left = i > 0 and segments[i - 1].state + segment.state == 3
@@ -199,6 +200,8 @@ class Stroke
           segments[i - 1].state + segments[i].state == 3
         k = segments[i].i
         points.push new Point [@stroke[k - 1], @stroke[k]], 'inflection'
+        # TODO(skishore): Add inflection points when a straight segment
+        # separates two colored segments of sufficient length to dominate it.
     points
 
   find_singleton_point: (segment) =>
