@@ -52,6 +52,13 @@ class Segment
     state: @state
 
 
+class Point
+  constructor: (points, @type) ->
+    @point =
+      x: (Util.sum (point.x for point in points))/points.length
+      y: (Util.sum (point.y for point in points))/points.length
+
+
 class Stroke
   # The initial number of smoothing iterations applied to the stroke.
   stroke_smoothing: 3
@@ -105,6 +112,7 @@ class Stroke
       @states = (0 for point in @stroke)
       @loops = []
       @segments = [new Segment @stroke, @states, 0, @stroke.length, true, true]
+    @points = @find_points @stroke, @segments
 
   check_size: (bounds) =>
     # Return true if this stroke is big enough to not be considered a dot.
@@ -155,6 +163,38 @@ class Stroke
 
   find_stroke_intersection: (stroke, i, j) =>
     Util.intersection stroke[i], stroke[i + 1], stroke[j], stroke[j + 1]
+
+  find_points: (stroke, segments) =>
+    if segments.length == 1 and (segments[0].dot or segments[0].closed)
+      return @find_singleton_point segments[0]
+    points = [
+      (new Point [stroke[0]], 'endpoint'),
+      (new Point [stroke[stroke.length - 1]], 'endpoint')
+    ]
+    for segment, i in segments
+      if segment.closed
+        type = if segment.minor then 'cusp' else 'loop'
+        points.push new Point [@stroke[segment.i], @stroke[segment.j - 1]], type
+      else if segment.minor
+        if segment.state != 0
+          left = i > 0 and segments[i - 1].state != segment.state
+          right = i + 1 < segments.length and \
+              segments[i + 1].state != segment.state
+          [k, l] = [segment.i, segment.j]
+          if left and right
+            points.push new Point [@stroke[k], @stroke[l]], 'cusp'
+          else if left
+            points.push new Point [@stroke[k - 1], @stroke[k]], 'cusp'
+          else if right
+            points.push new Point [@stroke[l], @stroke[l + 1]], 'cusp'
+      else if i > 0 and not segments[i - 1].minor and \
+          segments[i - 1].state + segments[i].state == 3
+        k = segments[i].i
+        points.push new Point [@stroke[k - 1], @stroke[k]], 'inflection'
+    points
+
+  find_singleton_point: (segment) =>
+    [new Point segment.bounds, if segment.dot then 'dot' else 'closed']
 
   postprocess: (stroke, states) =>
     # Takes an (n - 2)-element list of states and extends it to a list of n
@@ -217,6 +257,7 @@ class Stroke
   split_loop_segments: (segments, stroke, states, loops) =>
     result = []
     dominates = (segment1, segment2) =>
+      return segment2.length == 0
       segment1.closed and not segment2.closed and
       (segment2.state == 0 or segment2.state == segment1.state) and
       segment2.length < @split_threshold*segment1.length
