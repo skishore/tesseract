@@ -54,9 +54,15 @@ class Segment
 
 class Point
   constructor: (points, @type) ->
-    @point =
-      x: (Util.sum (point.x for point in points))/points.length
-      y: (Util.sum (point.y for point in points))/points.length
+    @x = (Util.sum (point.x for point in points))/points.length
+    @y = (Util.sum (point.y for point in points))/points.length
+
+  draw: (canvas) =>
+    canvas.context.strokeStyle = '#000'
+    k = 1
+    canvas.point_width *= k
+    canvas.draw_point @
+    canvas.point_width /= k
 
 
 class Stroke
@@ -122,6 +128,8 @@ class Stroke
   draw: (canvas) =>
     for segment in @segments
       segment.draw canvas
+    for point in @points
+      point.draw canvas
 
   find_loops: (stroke, states) =>
     loops = []
