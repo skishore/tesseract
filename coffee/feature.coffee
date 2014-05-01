@@ -185,16 +185,16 @@ class Stroke
         points.push new Point [@stroke[segment.i], @stroke[segment.j - 1]], type
       else if segment.minor
         if segment.state != 0
-          left = i > 0 and segments[i - 1].state != segment.state
+          left = i > 0 and segments[i - 1].state + segment.state == 3
           right = i + 1 < segments.length and \
-              segments[i + 1].state != segment.state
+              segments[i + 1].state + segment.state == 3
           [k, l] = [segment.i, segment.j]
           if left and right
-            points.push new Point [@stroke[k], @stroke[l]], 'cusp'
+            points.push new Point [@stroke[k], @stroke[l - 1]], 'cusp'
           else if left
             points.push new Point [@stroke[k - 1], @stroke[k]], 'cusp'
           else if right
-            points.push new Point [@stroke[l], @stroke[l + 1]], 'cusp'
+            points.push new Point [@stroke[l - 1], @stroke[l]], 'cusp'
       else if i > 0 and not segments[i - 1].minor and \
           segments[i - 1].state + segments[i].state == 3
         k = segments[i].i
