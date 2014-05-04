@@ -23,13 +23,16 @@ class Segment
         y: (@bounds[0].y + @bounds[1].y)/2
       return
     canvas.line_width = 1
-    if not @minor
-      canvas.draw_rect @bounds[0], @bounds[1]
-      canvas.line_width = 2
+    #if not @minor
+    #  canvas.draw_rect @bounds[0], @bounds[1]
+    #  canvas.line_width = 2
     canvas.context.strokeStyle = @color
     for k in [@i...@j]
-      if k + 1 < @j
-        canvas.draw_line @stroke[k], @stroke[k + 1]
+      canvas.point_width /= 2
+      canvas.draw_point @stroke[k]
+      canvas.point_width *= 2
+      #if k + 1 < @j
+      #  canvas.draw_line @stroke[k], @stroke[k + 1]
 
   get_color: =>
     if @closed
@@ -128,8 +131,8 @@ class Stroke
   draw: (canvas) =>
     for segment in @segments
       segment.draw canvas
-    for point in @points
-      point.draw canvas
+    #for point in @points
+    #  point.draw canvas
 
   find_loops: (stroke, states) =>
     loops = []
@@ -234,8 +237,8 @@ class Stroke
   segment: (stroke, states, loops) =>
     # Returns a list of segments that (almost) partition the stroke.
     segments = @segment_states stroke, states
-    segments = @merge_straight_segments segments, stroke, states
-    segments = @split_loop_segments segments, stroke, states, loops
+    #segments = @merge_straight_segments segments, stroke, states
+    #segments = @split_loop_segments segments, stroke, states, loops
     segments
 
   segment_states: (stroke, states) =>
