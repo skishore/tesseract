@@ -45,7 +45,7 @@ window.onload = ->
   mouse = new Mouse
   sketchpad = new Sketchpad $('.sketchpad'), mouse
   feature = new Feature $('.feature')
-  feature.redraw if DEMO_MODE then TRAIN_DATA[index].data else undefined
+  feature.redraw if DEMO_MODE then TEST_DATA[3].data else undefined
 
   classifier = new Classifier feature, TRAIN_DATA
 

@@ -77,25 +77,32 @@ class Stroke
 
   # Constants that control the hidden Markov model used to decompose strokes.
   # State 0 -> straight, state 1 -> clockwise, state 2 -> counterclockwise.
-  angle_smoothing: 1
+  #
+  # TODO(skishore): Still need to flatten angles within angle_smoothing steps
+  # away from the endpoints. Unless there's another way...
+  angle_smoothing: 10
   threshold = 0.01*Math.PI
   sharp_threshold = 0.1*Math.PI
 
   straight_pdf = (angle) ->
-    magnitude = Math.abs angle
-    if magnitude < threshold then 0.9
-    else if magnitude < sharp_threshold then 0.05 else 0.001
+    #magnitude = Math.abs angle
+    #if magnitude < threshold then 0.9
+    #else if magnitude < sharp_threshold then 0.05 else 0.001
+    [k, l] = [2, 4000]
+    k*Math.exp -l*angle*angle
 
   curved_pdf = (angle) ->
-    if angle > threshold then 0.8
-    else if angle > -sharp_threshold then 0.1 else 0.001
+    [k, l] = [0.8, 600]
+    diff = angle - threshold
+    if diff > 0 then k else k*Math.exp -l*diff*diff
 
   pdfs: {
     0: straight_pdf
     1: curved_pdf
     2: (angle) -> curved_pdf -angle
   }
-  transition_prob: 0.01
+  straight_transition_prob: 0.00001
+  curved_transition_prob: 0.00001
 
   # The maximum number of stroke points in a loop.
   loop_count: 80
@@ -353,8 +360,12 @@ class Stroke
         [best_log, best_state] = [-Infinity, undefined]
         for last_state of @pdfs
           [last_log, _] = memo[memo.length - 1][last_state]
-          new_log = last_log + ( \
-              if last_state == state then 0 else Math.log @transition_prob)
+          new_log = last_log
+          if last_state != state
+            if last_state == '0' or state == '0'
+              new_log += Math.log @straight_transition_prob
+            else
+              new_log += Math.log @curved_transition_prob
           if new_log > best_log
             [best_log, best_state] = [new_log, last_state]
         penalty = Math.log @pdfs[state] angle
