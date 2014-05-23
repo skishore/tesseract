@@ -80,17 +80,20 @@ class Stroke
   angle_smoothing: 1
   threshold = 0.01*Math.PI
   sharp_threshold = 0.1*Math.PI
+
+  straight_pdf = (angle) ->
+    magnitude = Math.abs angle
+    if magnitude < threshold then 0.9
+    else if magnitude < sharp_threshold then 0.05 else 0.001
+
+  curved_pdf = (angle) ->
+    if angle > threshold then 0.8
+    else if angle > -sharp_threshold then 0.1 else 0.001
+
   pdfs: {
-    0: (angle) ->
-      magnitude = Math.abs angle
-      if magnitude < threshold then 0.9
-      else if magnitude < sharp_threshold then 0.05 else 0.001
-    1: (angle) ->
-      if angle > threshold then 0.8
-      else if angle > -sharp_threshold then 0.1 else 0.001
-    2: (angle) ->
-      if angle < -threshold then 0.8
-      else if angle < sharp_threshold then 0.1 else 0.001
+    0: straight_pdf
+    1: curved_pdf
+    2: (angle) -> curved_pdf -angle
   }
   transition_prob: 0.01
 
