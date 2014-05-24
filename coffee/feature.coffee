@@ -1,3 +1,37 @@
+class @LinearRegression
+  constructor: (stroke) ->
+    @n = 0
+    @mean = x: 0, y: 0
+    @variance = x: 0, y: 0
+    @covariance = 0
+    @add_stroke stroke
+
+  add_point: (point) =>
+    [dx, dy] = [point.x - @mean.x, point.y - @mean.y]
+    @n += 1
+    @mean.x += dx/@n
+    @mean.y += dy/@n
+    @variance.x += ((@n - 1)/@n*dx*dx - @variance.x)/@n
+    @variance.y += ((@n - 1)/@n*dy*dy - @variance.y)/@n
+    @covariance += ((@n - 1)/@n*dx*dy - @covariance)/@n
+
+  add_stroke: (stroke) =>
+    if stroke?.length
+      for point in stroke
+        @add_point point
+
+  slope: =>
+    @covariance/@variance.x
+
+  intercept: =>
+    @mean.y - (do @slope)/@mean.x
+
+  correlation: =>
+    if @variance.x == 0 or @variance.y == 0
+      return 1
+    @covariance/Math.sqrt @variance.x*@variance.y
+
+
 class Segment
   length_threshold: 0.25
 
@@ -76,33 +110,15 @@ class Stroke
   perimeter_threshold: 0.4
 
   # Constants that control the hidden Markov model used to decompose strokes.
-  # State 0 -> straight, state 1 -> clockwise, state 2 -> counterclockwise.
-  #
-  # TODO(skishore): Still need to flatten angles within angle_smoothing steps
-  # away from the endpoints. Unless there's another way...
-  angle_smoothing: 10
-  threshold = 0.01*Math.PI
-  sharp_threshold = 0.1*Math.PI
-
-  straight_pdf = (angle) ->
-    #magnitude = Math.abs angle
-    #if magnitude < threshold then 0.9
-    #else if magnitude < sharp_threshold then 0.05 else 0.001
-    [k, l] = [2, 4000]
-    k*Math.exp -l*angle*angle
-
+  #   state 1 -> clockwise, state 2 -> counterclockwise.
+  angle_smoothing: 3
   curved_pdf = (angle) ->
-    [k, l] = [0.8, 600]
-    diff = angle - threshold
-    if diff > 0 then k else k*Math.exp -l*diff*diff
-
+    if angle > 0 then 1 else Math.exp -200*angle*angle
   pdfs: {
-    0: straight_pdf
     1: curved_pdf
     2: (angle) -> curved_pdf -angle
   }
-  straight_transition_prob: 0.00001
-  curved_transition_prob: 0.00001
+  curved_transition_prob: 0.000001
 
   # The maximum number of stroke points in a loop.
   loop_count: 80
@@ -139,6 +155,7 @@ class Stroke
     (Util.perimeter bounds[0], bounds[1]) > @perimeter_threshold
 
   draw: (canvas) =>
+    console.log do (new LinearRegression @stroke).correlation
     for segment in @segments
       segment.draw canvas
     #for point in @points
@@ -353,7 +370,7 @@ class Stroke
     # where best_log is the greatest possible log probability assigned to
     # any chain that ends at state `state` at index i, and last_state is the
     # state at index i - 1 for that chain.
-    memo = [{0: [0, undefined], 1: [0, undefined], 2: [0, undefined]}]
+    memo = [{1: [0, undefined], 2: [0, undefined]}]
     for angle in angles
       new_memo = {}
       for state of @pdfs
