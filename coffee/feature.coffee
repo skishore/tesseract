@@ -134,27 +134,15 @@ class Stroke
   merge_threshold: 1.0
   split_threshold: 0.5
 
-  drop_close_points: (stroke) =>
-    result = []
-    length = 0
-    for point, i in stroke
-      if i > 0
-        length += Util.distance stroke[i - 1], point
-      if result.length == 0 or length > 0.05
-        result.push point
-        length = 0
-    result
-
   constructor: (bounds, stroke) ->
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
     @stroke = (Util.rescale bounds, point for point in stroke)
-    #@stroke = @drop_close_points @stroke
     bounds = Util.bounds @stroke
     if @stroke.length > 2 and @check_size bounds
       states = @viterbi Util.angles @stroke
       @states = @postprocess @stroke, states
       @loops = @find_loops @stroke, @states
-      @segments = @segment @stroke, @states, @loops
+      @segments = @segment @stroke, @states
     else
       @states = (0 for point in @stroke)
       @loops = []
@@ -257,37 +245,9 @@ class Stroke
     result
 
   find_points: (stroke, segments) =>
-    if segments.length == 1 and (segments[0].dot or segments[0].closed)
+    if segments.length == 1 and segments[0].dot
       return @find_singleton_point segments[0]
     return @find_cusps stroke, segments
-    points = [
-      (new Point [stroke[0]], 'endpoint'),
-      (new Point [stroke[stroke.length - 1]], 'endpoint')
-    ]
-    for segment, i in segments
-      if segment.closed
-        type = if segment.minor then 'cusp' else 'loop'
-        points.push new Point [@stroke[segment.i], @stroke[segment.j - 1]], type
-        # TODO(skishore): Detect cusps when they occur within loops...
-      else if segment.minor
-        if segment.state != 0
-          left = i > 0 and segments[i - 1].state + segment.state == 3
-          right = i + 1 < segments.length and \
-              segments[i + 1].state + segment.state == 3
-          [k, l] = [segment.i, segment.j]
-          if left and right
-            points.push new Point [@stroke[k], @stroke[l - 1]], 'cusp'
-          else if left
-            points.push new Point [@stroke[k - 1], @stroke[k]], 'cusp'
-          else if right
-            points.push new Point [@stroke[l - 1], @stroke[l]], 'cusp'
-      else if i > 0 and not segments[i - 1].minor and \
-          segments[i - 1].state + segments[i].state == 3
-        k = segments[i].i
-        points.push new Point [@stroke[k - 1], @stroke[k]], 'inflection'
-        # TODO(skishore): Add inflection points when a straight segment
-        # separates two colored segments of sufficient length to dominate it.
-    points
 
   find_singleton_point: (segment) =>
     [new Point segment.bounds, if segment.dot then 'dot' else 'closed']
@@ -316,14 +276,7 @@ class Stroke
         states[j] = states[i]
     states
 
-  segment: (stroke, states, loops) =>
-    # Returns a list of segments that (almost) partition the stroke.
-    segments = @segment_states stroke, states
-    #segments = @merge_straight_segments segments, stroke, states
-    #segments = @split_loop_segments segments, stroke, states, loops
-    segments
-
-  segment_states: (stroke, states) =>
+  segment: (stroke, states) =>
     # Returns the list of segments based on on state data.
     result = []
     for state, i in states
@@ -332,75 +285,6 @@ class Stroke
       else
         result.push [i, i + 1]
     (new Segment stroke, states[i], i, j for [i, j] in result)
-
-  merge_straight_segments: (segments, stroke, states) =>
-    result = []
-    i = 0
-    while i < segments.length
-      segment = segments[i]
-      if result.length and i < segments.length - 1
-        [prev, next] = [result[result.length - 1], segments[i + 1]]
-        if segment.state == 0 and prev.state == next.state != 0
-          if segment.length < @merge_threshold*(prev.length + next.length)
-            prev.merge segment
-            prev.merge next
-            i += 2
-            continue
-      result.push segment
-      i += 1
-    result
-
-  split_loop_segments: (segments, stroke, states, loops) =>
-    result = []
-    dominates = (segment1, segment2) =>
-      return segment2.length == 0
-      segment1.closed and not segment2.closed and
-      (segment2.state == 0 or segment2.state == segment1.state) and
-      segment2.length < @split_threshold*segment1.length
-    push_segment = (segment) ->
-      if result.length and dominates result[result.length - 1], segment
-        result[result.length - 1].merge segment
-      else
-        result.push segment
-    [i, j] = [0, 0]
-    while i < segments.length and j < loops.length
-      [min, max] = loops[j]
-      while segments[i].j < min
-        push_segment segments[i]
-        i += 1
-      # Get the list of segments that overlap loop `dot`.
-      overlaps = []
-      while segments[i].j < max
-        overlaps.push segments[i]
-        i += 1
-      overlaps.push segments[i]
-      # Check if this loop is a clockwise or counterclockwise loop.
-      state_1_minus_state_2 = 0
-      for overlap in overlaps
-        if overlap.state
-          count = (Math.min max, overlap.j) - (Math.max min, overlap.i)
-          state_1_minus_state_2 += if overlap.state == 1 then count else -count
-      state = if state_1_minus_state_2 > 0 then 1 else 2
-      # Construct a list of three segments that will be used to cover the loop.
-      [before, after] = [overlaps[0], overlaps[overlaps.length - 1]]
-      prev_segment = new Segment stroke, before.state, before.i, min
-      loop_segment = new Segment stroke, state, min, max, true
-      if dominates loop_segment, prev_segment
-        prev_segment.state = loop_segment.state
-        prev_segment.merge loop_segment
-        push_segment prev_segment
-      else
-        push_segment prev_segment
-        push_segment loop_segment
-      if after.j > max
-        segments[i] = new Segment stroke, after.state, max, after.j
-      else
-        i += 1
-      j += 1
-    while i < segments.length
-      push_segment segments[i]
-      i += 1
-    result
 
   handle_180s: (angles) =>
     # If an angle is sufficiently close to 180 degrees, and if it is the same
