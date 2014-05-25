@@ -93,13 +93,11 @@ class Point
   constructor: (points, @type) ->
     @x = (Util.sum (point.x for point in points))/points.length
     @y = (Util.sum (point.y for point in points))/points.length
+    @color = '#000'
 
   draw: (canvas) =>
-    canvas.context.strokeStyle = '#000'
-    k = 1
-    canvas.point_width *= k
+    canvas.context.strokeStyle = @color
     canvas.draw_point @
-    canvas.point_width /= k
 
 
 class Stroke
@@ -124,7 +122,7 @@ class Stroke
   loop_count: 80
   # How tolerant we are of unclosed loops at stroke endpoints. Set this
   # constant to 0 to ensure that all loops are complete.
-  loop_tolerance: 0.25
+  loop_tolerance: 0.1
 
   # The maximum number of points and length of a hook.
   hook_count: 10
@@ -134,9 +132,21 @@ class Stroke
   merge_threshold: 1.0
   split_threshold: 0.5
 
+  drop_close_points: (stroke) =>
+    result = []
+    length = 0
+    for point, i in stroke
+      if i > 0
+        length += Util.distance stroke[i - 1], point
+      if result.length == 0 or length > 0.05
+        result.push point
+        length = 0
+    result
+
   constructor: (bounds, stroke) ->
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
     @stroke = (Util.rescale bounds, point for point in stroke)
+    #@stroke = @drop_close_points @stroke
     bounds = Util.bounds @stroke
     if @stroke.length > 2 and @check_size bounds
       states = @viterbi Util.angles @stroke
@@ -155,11 +165,15 @@ class Stroke
     (Util.perimeter bounds[0], bounds[1]) > @perimeter_threshold
 
   draw: (canvas) =>
-    console.log do (new LinearRegression @stroke).correlation
     for segment in @segments
       segment.draw canvas
-    #for point in @points
-    #  point.draw canvas
+    #for [i, j] in @loops
+    #  canvas.context.strokeStyle = 'purple'
+    #  canvas.line_width *= 4
+    #  canvas.draw_line @stroke[i], @stroke[j - 1]
+    #  canvas.line_width /= 4
+    for point in @points
+      point.draw canvas
 
   find_loops: (stroke, states) =>
     loops = []
@@ -202,9 +216,60 @@ class Stroke
   find_stroke_intersection: (stroke, i, j) =>
     Util.intersection stroke[i], stroke[i + 1], stroke[j], stroke[j + 1]
 
+  check_cusp_point: (stroke, i, r, tolerance, color, points) =>
+    if i - r < 0 or i + r >= stroke.length
+      return
+    angle1 = Util.angle stroke[i - r], stroke[i - r + 1]
+    angle2 = Util.angle stroke[i + r], stroke[i + r - 1]
+    diff = (angle1 - angle2 + 3*Math.PI) % (2*Math.PI) - Math.PI
+    if (Math.abs diff) < tolerance
+      points.push new Point [stroke[i]], 'cusp'
+      points[points.length - 1].color = color
+      points[points.length - 1].i = i
+      base_confidence = (1 - (Math.abs diff)/tolerance)/r
+      adjustment= if color == 'black' then 1 else 0.5
+      points[points.length - 1].confidence = adjustment*base_confidence
+
+  find_cusps: (stroke, segments) =>
+    points = []
+    [r, tolerance] = [2, 0.4*Math.PI]
+    for i in [r...stroke.length - r]
+      @check_cusp_point stroke, i, r, tolerance, 'black', points
+    for segment, i in segments
+      if i > 0
+        length = 0
+        for k in [segment.i...segment.j]
+          @check_cusp_point stroke, k, 2*r, 1.5*tolerance, 'brown', points
+          if k < stroke.length - 1
+            length += Util.distance stroke[k], stroke[k + 1]
+          if length > 0.05
+            break
+      if i < segments.length - 1
+        length = 0
+        for k in [segment.j - 1..segment.i]
+          @check_cusp_point stroke, k, 2*r, 1.5*tolerance, 'brown', points
+          if k > 0
+            length += Util.distance stroke[k], stroke[k - 1]
+          if length > 0.05
+            break
+    points.sort (point1, point2) -> point1.i - point2.i
+    @deduplicate points
+
+  deduplicate: (points) =>
+    result = []
+    r = 8
+    for point in points
+      point.color = 'blue'
+      if result.length == 0 or point.i > result[result.length - 1].i + r
+        result.push point
+      else if point.confidence > result[result.length - 1].confidence
+        result[result.length - 1] = point
+    result
+
   find_points: (stroke, segments) =>
     if segments.length == 1 and (segments[0].dot or segments[0].closed)
       return @find_singleton_point segments[0]
+    return @find_cusps stroke, segments
     points = [
       (new Point [stroke[0]], 'endpoint'),
       (new Point [stroke[stroke.length - 1]], 'endpoint')
