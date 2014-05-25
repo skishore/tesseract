@@ -28,7 +28,9 @@ class @Sketchpad extends Canvas
      cursor.y >= 0 and cursor.y < @context.canvas.height)
 
   mousedown: (e) =>
-    @strokes.push []
+    # Create a new stroke in all cases except when the last one is empty.
+    if @strokes.length == 0 or @strokes[@strokes.length - 1].length > 0
+      @strokes.push []
     @cursor = @get_cursor e.originalEvent
     if (@in_range @cursor) and (@mouse.mouse_down or @mouse.touch_enabled)
       @draw_point @cursor
@@ -41,6 +43,9 @@ class @Sketchpad extends Canvas
     do e.stopPropagation
 
   mouseup: (e) =>
+    # Delete the last stroke if it was empty.
+    if @strokes[@strokes.length - 1]?.length == 0
+      do @strokes.pop
     if @version > @last_version
       @changed @version
     @last_version = @version

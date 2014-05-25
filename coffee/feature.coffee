@@ -37,6 +37,8 @@ class Segment
 
   constructor: (@stroke, @state, i, j, closed, dot) ->
     @reset i, j, closed, dot
+    #if not (0 <= i < j <= @stroke.length)
+    #  console.log 'Invalid segment!', @
 
   reset: (@i, @j, closed, dot) =>
     @bounds = Util.bounds @stroke.slice i, j
@@ -122,7 +124,7 @@ class Stroke
   loop_count: 80
   # How tolerant we are of unclosed loops at stroke endpoints. Set this
   # constant to 0 to ensure that all loops are complete.
-  loop_tolerance: 0.1
+  loop_tolerance: 0.2
 
   # The maximum number of points and length of a hook.
   hook_count: 10
@@ -160,61 +162,49 @@ class Stroke
     @points = @find_points @stroke, @segments
 
   check_size: (bounds) =>
-    # Return true if this stroke is big enough to not be considered a dot.
+    # Return true if the bounding box is too big to be considered a dot.
     (Util.area bounds[0], bounds[1]) > @area_threshold or
     (Util.perimeter bounds[0], bounds[1]) > @perimeter_threshold
 
   draw: (canvas) =>
     for segment in @segments
       segment.draw canvas
-    #for [i, j] in @loops
-    #  canvas.context.strokeStyle = 'purple'
-    #  canvas.line_width *= 4
-    #  canvas.draw_line @stroke[i], @stroke[j - 1]
-    #  canvas.line_width /= 4
+    for [i, j] in @loops
+      canvas.context.strokeStyle = 'purple'
+      canvas.draw_point @stroke[i]
+      canvas.draw_point @stroke[j - 1]
     for point in @points
       point.draw canvas
+
+  extend: (point1, point2, length) =>
+    base_length = Util.distance point1, point2
+    if base_length > 0
+      return {
+        x: point2.x + length/base_length*(point2.x - point1.x)
+        y: point2.y + length/base_length*(point2.y - point1.y)
+      }
+    point2
 
   find_loops: (stroke, states) =>
     loops = []
     i = 0
     while i < stroke.length
       for j in [3...@loop_count]
-        if i + j + 1 >= stroke.length
+        if i + j >= stroke.length
           break
         [u, v, point] = @find_stroke_intersection stroke, i, i + j - 1
         if point and 0 <= u < 1 and 0 <= v < 1
-            loops.push [i, i + j + 1]
-            i += j
+          loops.push [i, i + j + 1]
       i += 1
-    @find_loose_loops stroke, states, loops
-
-  find_loose_loops: (stroke, states, loops) =>
-    for i in [0, stroke.length - 2]
-      states_found = {}
-      dir = if i == 0 then 1 else -1
-      j = i + 3*dir
-      if loops.length
-        bound = if i == 0 then loops[0][0] else loops[loops.length - 1][1] - 1
-      else
-        bound = if i == 0 then stroke.length else 0
-      while dir*j < dir*bound
-        # Loose loops are not allowed to contain both cw and ccw segments.
-        states_found[states[j]] = true
-        if states_found[1] and states_found[2]
-          break
-        [u, v, point] = @find_stroke_intersection stroke, i, j - 1
-        # Add a special case for a loop that contains the entire stroke.
-        skip_v = j == stroke.length - 2 and v > 1
-        if point and dir*u < (dir - 1)/2 and (0 <= v < 1 or skip_v) and
-            (Util.distance stroke[i], point) < @loop_tolerance
-          if i == 0 then loops.unshift [i, j + 1] else loops.push [j - 1, i + 2]
-          break
-        j += dir
     loops
 
   find_stroke_intersection: (stroke, i, j) =>
-    Util.intersection stroke[i], stroke[i + 1], stroke[j], stroke[j + 1]
+    [p1, p2, p3, p4] = [stroke[i], stroke[i + 1], stroke[j], stroke[j + 1]]
+    if i == 0
+      p1 = @extend p2, p1, @loop_tolerance
+    if j + 2 == stroke.length
+      p4 = @extend p3, p4, @loop_tolerance
+    Util.intersection p1, p2, p3, p4
 
   check_cusp_point: (stroke, i, r, tolerance, color, points) =>
     if i - r < 0 or i + r >= stroke.length
