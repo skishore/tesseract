@@ -3,20 +3,17 @@ class @Util
     # Returns the angle of the line formed between two points.
     Math.atan2 point2.y - point1.y, point2.x - point1.x
 
-  @angles: (stroke) ->
-    # Takes an n-point stroke of n elements and returns an (n - 2)-element
-    # list of angles between adjacent points. This method will throw an error
-    # if the stroke has <= 2 points.
-    result = []
-    last_angle = undefined
-    angle = Util.angle stroke[0], stroke[1]
-    for i in [1...stroke.length - 1]
-      [last_angle, angle] = [angle, Util.angle stroke[i], stroke[i + 1]]
-      result.push (angle - last_angle + 3*Math.PI) % (2*Math.PI) - Math.PI
-    result
+  @angle_diff: (angle1, angle2) ->
+    # Returns the difference between the two angles, which is guaranteed to
+    # be in the interval [-pi, pi].
+    (angle1 - angle2 + 3*Math.PI) % (2*Math.PI) - Math.PI
 
   @area: (point1, point2) ->
     Math.abs (point2.x - point1.x)*(point2.y - point1.y)
+
+  @assert: (condition, message) ->
+    if not condition
+      throw new Exception message
 
   @bounds: (stroke) ->
     # Returns a [min, max] pair of corners of a box bounding the points.

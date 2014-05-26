@@ -112,13 +112,13 @@ class Stroke
   # Constants that control the hidden Markov model used to decompose strokes.
   #   state 1 -> clockwise, state 2 -> counterclockwise.
   angle_smoothing: 3
-  curved_pdf = (angle) ->
-    if angle > 0 then 1 else Math.exp -200*angle*angle
-  pdfs: {
-    1: curved_pdf
-    2: (angle) -> curved_pdf -angle
+  log_curved_pdf = (angle) ->
+    if angle > 0 then 0 else -24*angle*angle
+  log_pdfs: {
+    1: log_curved_pdf
+    2: (angle) -> log_curved_pdf -angle
   }
-  curved_transition_prob: 0.000001
+  log_transition_prob: -1
 
   # The maximum number of stroke points in a loop.
   loop_count: 80
@@ -136,11 +136,9 @@ class Stroke
 
   constructor: (bounds, stroke) ->
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
-    @stroke = (Util.rescale bounds, point for point in stroke)
-    bounds = Util.bounds @stroke
-    if @stroke.length > 2 and @check_size bounds
-      states = @viterbi Util.angles @stroke
-      @states = @postprocess @stroke, states
+    @initialize (Util.rescale bounds, point for point in stroke)
+    if do @check_size
+      @states = @postprocess @stroke, do @run_viterbi
       @loops = @find_loops @stroke, @states
       @segments = @segment @stroke, @states
     else
@@ -149,10 +147,33 @@ class Stroke
       @segments = [new Segment @stroke, @states, 0, @stroke.length, true, true]
     @points = @find_points @stroke, @segments
 
-  check_size: (bounds) =>
-    # Return true if the bounding box is too big to be considered a dot.
-    (Util.area bounds[0], bounds[1]) > @area_threshold or
-    (Util.perimeter bounds[0], bounds[1]) > @perimeter_threshold
+  initialize: (@stroke) =>
+    # Set up basic data structures:
+    #   - @stroke - the (non-empty) list of n stroke points
+    #   - @bounds - bounds[0] is the point with the minimum x and y of any
+    #               point in the stroke, @bounds[1] is the same for maximum
+    #   - @angles - an n - 1 element list where angles[i] is the angle of the
+    #               segment stroke[i], stroke[i + 1]
+    #   - @lengths - an n element list where length[i] is the sum of the
+    #                lengths of all segments from stroke[0] to stroke[i]
+    Util.assert (stroke.length > 0), 'Initialized with empty stroke!'
+    @bounds = Util.bounds @stroke
+    @angles = []
+    @lengths = [0]
+    for i in [0...@stroke.length - 1]
+      @angles.push Util.angle @stroke[i], @stroke[i + 1]
+      @lengths.push Util.distance @stroke[i], @stroke[i + 1]
+
+  length: (i, j) =>
+    # Return the sum of the lengths of segments from stroke[i] to stroke[j].
+    return Math.abs @lengths[j] - @lengths[i]
+
+  check_size: =>
+    # Return true if this stroke is too big to be considered a dot.
+    @stroke.length > 2 and (
+      (Util.area @bounds[0], @bounds[1]) > @area_threshold or
+      (Util.perimeter @bounds[0], @bounds[1]) > @perimeter_threshold
+    )
 
   draw: (canvas) =>
     for segment in @segments
@@ -299,11 +320,17 @@ class Stroke
           angles[i] *= -1
     angles
 
-  viterbi: (angles) =>
-    # Finds the maximum-likelihood state list of an HMM for the list of angles.
+  run_viterbi: =>
+    # Find the maximum-likelihood state list of an HMM for the stroke's angles.
     #
-    # Start by checking for any angle that are close enough to PI that they are
-    # neither cw nor ccw. Then smooth the rest of the angles.
+    # Preprocessing steps:
+    #   - Compute the n - 2 element list of differences between adjacent angles
+    #   - Check for any angles close to pi that could be either cw or ccw.
+    #   - Smooth the rest of the angles.
+    angles = (
+      (Util.angle_diff @angles[i + 1], @angles[i]) \
+      for i in [0...@angles.length - 1]
+    )
     angles = Util.smooth (@handle_180s angles), @angle_smoothing
     # Build a memo, where memo[i][state] is a pair [best_log, last_state],
     # where best_log is the greatest possible log probability assigned to
@@ -312,24 +339,21 @@ class Stroke
     memo = [{1: [0, undefined], 2: [0, undefined]}]
     for angle in angles
       new_memo = {}
-      for state of @pdfs
+      for state of @log_pdfs
         [best_log, best_state] = [-Infinity, undefined]
-        for last_state of @pdfs
+        for last_state of @log_pdfs
           [last_log, _] = memo[memo.length - 1][last_state]
           new_log = last_log
           if last_state != state
-            if last_state == '0' or state == '0'
-              new_log += Math.log @straight_transition_prob
-            else
-              new_log += Math.log @curved_transition_prob
+            new_log += @log_transition_prob
           if new_log > best_log
             [best_log, best_state] = [new_log, last_state]
-        penalty = Math.log @pdfs[state] angle
+        penalty = @log_pdfs[state] angle
         new_memo[state] = [best_log + penalty, best_state]
       memo.push new_memo
     [best_log, best_state] = [-Infinity, undefined]
     # Trace back through the DP memo to recover the MLE state chain.
-    for state of @pdfs
+    for state of @log_pdfs
       [log, _] = memo[memo.length - 1][state]
       if log > best_log
         [best_log, best_state] = [log, state]
