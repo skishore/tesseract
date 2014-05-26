@@ -138,7 +138,7 @@ class Stroke
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
     @initialize (Util.rescale bounds, point for point in stroke)
     if do @check_size
-      @states = @postprocess @stroke, do @run_viterbi
+      @states = @postprocess do @run_viterbi
       @loops = @find_loops @stroke, @states
       @segments = @segment @stroke, @states
     else
@@ -162,11 +162,18 @@ class Stroke
     @lengths = [0]
     for i in [0...@stroke.length - 1]
       @angles.push Util.angle @stroke[i], @stroke[i + 1]
-      @lengths.push Util.distance @stroke[i], @stroke[i + 1]
+      @lengths.push (
+        @lengths[@lengths.length - 1] +
+        Util.distance @stroke[i], @stroke[i + 1]
+      )
 
-  length: (i, j) =>
+  length: (i) =>
+    # Return the length of the segment (stroke[i], stroke[i + 1]).
+    return @lengths[i + 1] - @lengths[i]
+
+  cumulative_length: (i, j) =>
     # Return the sum of the lengths of segments from stroke[i] to stroke[j].
-    return Math.abs @lengths[j] - @lengths[i]
+    return @lengths[j] - @lengths[i]
 
   check_size: =>
     # Return true if this stroke is too big to be considered a dot.
@@ -185,8 +192,7 @@ class Stroke
     for point in @points
       point.draw canvas
 
-  extend: (point1, point2, length) =>
-    base_length = Util.distance point1, point2
+  extend: (point1, point2, base_length, length) =>
     if base_length > 0
       return {
         x: point2.x + length/base_length*(point2.x - point1.x)
@@ -194,25 +200,28 @@ class Stroke
       }
     point2
 
-  find_loops: (stroke, states) =>
+  find_loops: =>
+    # Find any loops within this stroke. Return a list of intervals [i, j).
     loops = []
     i = 0
-    while i < stroke.length
+    while i < @stroke.length
       for j in [3...@loop_count]
-        if i + j >= stroke.length
+        if i + j >= @stroke.length
           break
-        [u, v, point] = @find_stroke_intersection stroke, i, i + j - 1
+        [u, v, point] = @find_stroke_intersection i, i + j - 1
         if point and 0 <= u < 1 and 0 <= v < 1
           loops.push [i, i + j + 1]
       i += 1
     loops
 
-  find_stroke_intersection: (stroke, i, j) =>
-    [p1, p2, p3, p4] = [stroke[i], stroke[i + 1], stroke[j], stroke[j + 1]]
+  find_stroke_intersection: (i, j) =>
+    # Return the intersection between the segments (stroke[i], stroke[i + 1])
+    # and (stroke[j], stroke[j + 1]).
+    [p1, p2, p3, p4] = [@stroke[i], @stroke[i + 1], @stroke[j], @stroke[j + 1]]
     if i == 0
-      p1 = @extend p2, p1, @loop_tolerance
-    if j + 2 == stroke.length
-      p4 = @extend p3, p4, @loop_tolerance
+      p1 = @extend p2, p1, (@length i), @loop_tolerance
+    if j + 2 == @stroke.length
+      p4 = @extend p3, p4, (@length j), @loop_tolerance
     Util.intersection p1, p2, p3, p4
 
   check_cusp_point: (stroke, i, r, tolerance, color, points) =>
@@ -273,25 +282,25 @@ class Stroke
   find_singleton_point: (segment) =>
     [new Point segment.bounds, if segment.dot then 'dot' else 'closed']
 
-  postprocess: (stroke, states) =>
+  postprocess: (states) =>
     # Takes an (n - 2)-element list of states and extends it to a list of n
     # states, one for each stroke point. Also does some final cleanup.
     states.unshift states[0]
     states.push states[states.length - 1]
-    @remove_hooks stroke, states
+    @remove_hooks states
 
-  remove_hooks: (stroke, states) =>
-    size = stroke.length
+  remove_hooks: (states) =>
+    size = @stroke.length
     if size > @hook_count
       # Remove hooks at the beginning of the stroke.
       for i in [0...@hook_count]
-        if (Util.distance stroke[0], stroke[i]) > @hook_length
+        if (@cumulative_length 0, i) > @hook_length
           break
       for j in [0...i]
         states[j] = states[i]
       # Remove hooks at the end of the stroke.
       for i in [size - 1..size - @hook_count]
-        if (Util.distance stroke[size - 1], stroke[i]) > @hook_length
+        if (@cumulative_length i, size - 1) > @hook_length
           break
       for j in [size - 1...i]
         states[j] = states[i]
