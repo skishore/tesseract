@@ -35,70 +35,44 @@ class @LinearRegression
 class Segment
   length_threshold: 0.25
 
-  constructor: (@stroke, @state, i, j, closed, dot) ->
-    @reset i, j, closed, dot
-    #if not (0 <= i < j <= @stroke.length)
-    #  console.log 'Invalid segment!', @
-
-  reset: (@i, @j, closed, dot) =>
-    @bounds = Util.bounds @stroke.slice i, j
-    @length = if i >= j then 0 else
-        Util.sum (Util.distance @stroke[k], @stroke[k + 1] for k in [i...j - 1])
-    # Compute signals for this segment. Minor segments on training data are
-    # ignored by scoring, but can still be matched with major segments as test.
-    @closed = if closed then true else false
+  constructor: (@stroke, @state, @i, @j, @dot) ->
+    @bounds = Util.bounds @stroke.slice @i, @j
     @dot = if dot then true else false
-    @minor = @length < @length_threshold and not @dot
     @color = do @get_color
 
   draw: (canvas) =>
-    if @dot
-      canvas.context.strokeStyle = '#00F'
-      canvas.draw_point
-        x: (@bounds[0].x + @bounds[1].x)/2
-        y: (@bounds[0].y + @bounds[1].y)/2
-      return
-    canvas.line_width = 1
-    #if not @minor
-    #  canvas.draw_rect @bounds[0], @bounds[1]
-    #  canvas.line_width = 2
-    canvas.context.strokeStyle = @color
-    for k in [@i...@j]
-      canvas.point_width /= 2
-      canvas.draw_point @stroke[k]
-      canvas.point_width *= 2
-      #if k + 1 < @j
-      #  canvas.draw_line @stroke[k], @stroke[k + 1]
+    if not @dot
+      canvas.context.strokeStyle = @color
+      for k in [@i...@j]
+        canvas.point_width /= 2
+        canvas.draw_point @stroke[k]
+        canvas.point_width *= 2
 
   get_color: =>
-    if @closed
-      return {1: '#808', 2: '#0AA'}[@state]
     return {0: '#000', 1: '#C00', 2: '#080'}[@state]
-
-  merge: (other) =>
-    if @j != other.i then console.log 'Unexpected merge!'
-    @reset @i, other.j, @closed or other.closed
 
   serialize: =>
     bounds: @bounds
     count: @j - @i
     start: Util.rescale @bounds, @stroke[@i]
     end:  Util.rescale @bounds, @stroke[@j - 1]
-    closed: @closed
-    dot: @dot
-    length: @length
-    minor: @minor
     state: @state
+    dot: @dot
+    # Deprecated signals.
+    length: 0
+    closed: false
+    minor: false
 
 
 class Point
-  constructor: (points, @type) ->
+  colors: {cusp: 'blue', dot: 'black', inflection: 'black', loop: 'purple'}
+
+  constructor: (points, @i, @type, @data) ->
     @x = (Util.sum (point.x for point in points))/points.length
     @y = (Util.sum (point.y for point in points))/points.length
-    @color = '#000'
 
   draw: (canvas) =>
-    canvas.context.strokeStyle = @color
+    canvas.context.strokeStyle = @colors[@type]
     canvas.draw_point @
 
 
@@ -120,19 +94,22 @@ class Stroke
   }
   log_transition_prob: -1
 
+  # The maximum number of points and length of a hook.
+  hook_count: 10
+  hook_length: 0.1
+
+  # Parameters for detecting cusps, that is, points where the stroke is within
+  # `tolerance` radians of making a full-pi turn. The entire stroke is scanned
+  # for high-confidence cusps, while only the regions near inflection points
+  # are scanned for low-confidence cusps.
+  high_confidence_cusp: {adjustment: 1, range: 2, tolerance: 0.4*Math.PI}
+  low_confidence_cusp: {adjustment: 0.5, range: 4, tolerance: 0.6*Math.PI}
+
   # The maximum number of stroke points in a loop.
   loop_count: 80
   # How tolerant we are of unclosed loops at stroke endpoints. Set this
   # constant to 0 to ensure that all loops are complete.
   loop_tolerance: 0.2
-
-  # The maximum number of points and length of a hook.
-  hook_count: 10
-  hook_length: 0.1
-
-  # Thresholds controlling stroke segmentation during preprocessing.
-  merge_threshold: 1.0
-  split_threshold: 0.5
 
   constructor: (bounds, stroke) ->
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
@@ -144,8 +121,8 @@ class Stroke
     else
       @states = (0 for point in @stroke)
       @loops = []
-      @segments = [new Segment @stroke, @states, 0, @stroke.length, true, true]
-    @points = @find_points @stroke, @segments
+      @segments = [new Segment @stroke, @states, 0, @stroke.length, true]
+    @points = do @find_points
 
   initialize: (@stroke) =>
     # Set up basic data structures:
@@ -224,63 +201,51 @@ class Stroke
       p4 = @extend p3, p4, (@length j), @loop_tolerance
     Util.intersection p1, p2, p3, p4
 
-  check_cusp_point: (stroke, i, r, tolerance, color, points) =>
-    if i - r < 0 or i + r >= stroke.length
+  check_cusp_point: (i, params, points) =>
+    {adjustment, range, tolerance} = params
+    if i - range < 0 or i + range >= @stroke.length
       return
-    angle1 = Util.angle stroke[i - r], stroke[i - r + 1]
-    angle2 = Util.angle stroke[i + r], stroke[i + r - 1]
-    diff = (angle1 - angle2 + 3*Math.PI) % (2*Math.PI) - Math.PI
+    angle1 = @angles[i - range]
+    angle2 = @angles[i + range - 1] - Math.PI
+    diff = Util.angle_diff angle1, angle2
     if (Math.abs diff) < tolerance
-      points.push new Point [stroke[i]], 'cusp'
-      points[points.length - 1].color = color
-      points[points.length - 1].i = i
-      base_confidence = (1 - (Math.abs diff)/tolerance)/r
-      adjustment= if color == 'black' then 1 else 0.5
-      points[points.length - 1].confidence = adjustment*base_confidence
-
-  find_cusps: (stroke, segments) =>
-    points = []
-    [r, tolerance] = [2, 0.4*Math.PI]
-    for i in [r...stroke.length - r]
-      @check_cusp_point stroke, i, r, tolerance, 'black', points
-    for segment, i in segments
-      if i > 0
-        length = 0
-        for k in [segment.i...segment.j]
-          @check_cusp_point stroke, k, 2*r, 1.5*tolerance, 'brown', points
-          if k < stroke.length - 1
-            length += Util.distance stroke[k], stroke[k + 1]
-          if length > 0.05
-            break
-      if i < segments.length - 1
-        length = 0
-        for k in [segment.j - 1..segment.i]
-          @check_cusp_point stroke, k, 2*r, 1.5*tolerance, 'brown', points
-          if k > 0
-            length += Util.distance stroke[k], stroke[k - 1]
-          if length > 0.05
-            break
-    points.sort (point1, point2) -> point1.i - point2.i
-    @deduplicate points
+      base_confidence = (1 - (Math.abs diff)/tolerance)/range
+      points.push new Point [@stroke[i]], i, 'cusp',
+        confidence: adjustment*base_confidence
 
   deduplicate: (points) =>
     result = []
     r = 8
     for point in points
-      point.color = 'blue'
       if result.length == 0 or point.i > result[result.length - 1].i + r
         result.push point
-      else if point.confidence > result[result.length - 1].confidence
+      else if point.data.confidence > result[result.length - 1].data.confidence
         result[result.length - 1] = point
     result
 
-  find_points: (stroke, segments) =>
-    if segments.length == 1 and segments[0].dot
-      return @find_singleton_point segments[0]
-    return @find_cusps stroke, segments
+  find_cusps: =>
+    points = []
+    for i in [0...@stroke.length]
+      @check_cusp_point i, @high_confidence_cusp, points
+    for segment in @segments
+      if segment.i > 0
+        for k in [segment.i...segment.j]
+          @check_cusp_point k, @low_confidence_cusp, points
+          length += (@lengths[k + 1]? or @lengths[k]) - @lengths[k]
+          if (@cumulative_length segment.i, k) > 0.05
+            break
+      if segment.j < @stroke.length
+        for k in [segment.j - 1..segment.i]
+          @check_cusp_point k, @low_confidence_cusp, points
+          if (@cumulative_length k, segment.j - 1) > 0.05
+            break
+    points.sort (point1, point2) -> point1.i - point2.i
+    @deduplicate points
 
-  find_singleton_point: (segment) =>
-    [new Point segment.bounds, if segment.dot then 'dot' else 'closed']
+  find_points: =>
+    if @segments.length == 1 and @segments[0].dot
+      return [new Point @segments[0].bounds, 0, 'dot']
+    return do @find_cusps
 
   postprocess: (states) =>
     # Takes an (n - 2)-element list of states and extends it to a list of n
@@ -314,7 +279,7 @@ class Stroke
         result[result.length - 1][1] = i + 1
       else
         result.push [i, i + 1]
-    (new Segment stroke, states[i], i, j for [i, j] in result)
+    ((new Segment stroke, states[i], i, j, false) for [i, j] in result)
 
   handle_180s: (angles) =>
     # If an angle is sufficiently close to 180 degrees, and if it is the same
