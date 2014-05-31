@@ -1,40 +1,48 @@
-class @LinearRegression
+class LinearRegression
   constructor: (stroke) ->
     @n = 0
-    @mean = x: 0, y: 0
-    @variance = x: 0, y: 0
-    @covariance = 0
+    @sum = {x: 0, y: 0}
+    @square_sum = {x: 0, y: 0}
+    @sum_xy = 0
     @add_stroke stroke
 
   add_point: (point) =>
-    [dx, dy] = [point.x - @mean.x, point.y - @mean.y]
     @n += 1
-    @mean.x += dx/@n
-    @mean.y += dy/@n
-    @variance.x += ((@n - 1)/@n*dx*dx - @variance.x)/@n
-    @variance.y += ((@n - 1)/@n*dy*dy - @variance.y)/@n
-    @covariance += ((@n - 1)/@n*dx*dy - @covariance)/@n
+    @sum.x += point.x
+    @sum.y += point.y
+    @square_sum.x += point.x*point.x
+    @square_sum.y += point.y*point.y
+    @sum_xy += point.x*point.y
 
   add_stroke: (stroke) =>
     if stroke?.length
       for point in stroke
         @add_point point
 
-  slope: =>
-    @covariance/@variance.x
+  mean_square_distance: (point1, point2) =>
+    diff = {x: point2.x - point1.x, y: point2.y - point1.y}
+    if not @normalize diff
+      return Infinity
+    [a, b, c] = [diff.y, -diff.x, diff.y*point1.x - diff.x*point1.y]
+    # TODO(skishore): Choose c that minimizes this polynomial instead
+    # of basing it on the dot product with point1.
+    result =
+      a*a*@square_sum.x + b*b*@square_sum.y + c*c*@n +
+      2*(a*b*@sum_xy - a*c*@sum.x - b*c*@sum.y)
+    result/@n
 
-  intercept: =>
-    @mean.y - (do @slope)/@mean.x
-
-  correlation: =>
-    if @variance.x == 0 or @variance.y == 0
-      return 1
-    @covariance/Math.sqrt @variance.x*@variance.y
+  normalize: (point) =>
+    length = Math.sqrt point.x*point.x + point.y*point.y
+    if length == 0
+      return false
+    point.x /= length
+    point.y /= length
+    true
 
 
 class Point
-  colors: {cusp: 'blue', loop: 'purple'}
-  priorities: {cusp: 2, loop: 1}
+  colors: {cusp: 'blue', loop: 'purple', line: 'red'}
+  priorities: {cusp: 3, loop: 2, line: 1}
 
   # The minimum distance along the stroke two points can occur.
   point_separation: 0.2
@@ -103,6 +111,11 @@ class Stroke
   low_confidence_cusp: {adjustment: 1, range: 4, tolerance: 0.6*Math.PI}
   # The maximum distance from a low-confidence cusp to an inflection point.
   inflection_cusp_distance: 0.05
+
+  # Constants controlling the maximum mean-square-difference and minimum length
+  # needed for a stroke section to qualify as a straight line.
+  mean_square_distance_threshold: 0.0004
+  line_length_threshold: 0.6
 
   # The maximum number of stroke points in a loop.
   loop_count: 80
@@ -213,6 +226,27 @@ class Stroke
     indices = [0, @stroke.length - 1]
     (new Point [@stroke[i]], i, i, 'endpoint' for i in indices)
 
+  find_best_line: (i, step, points) =>
+    regression = new LinearRegression
+    [j, best] = [i, i]
+    minimum_length = @line_length_threshold*@lengths[@stroke.length - 1]
+    while 0 <= j < @stroke.length
+      regression.add_point @stroke[j]
+      if (Math.abs @cumulative_length i, j) > minimum_length
+        distance = regression.mean_square_distance @stroke[i], @stroke[j]
+        if distance < @mean_square_distance_threshold
+          best = j
+      j += step
+    if best != i
+      points.push new Point [@stroke[i]], i, i, 'line'
+      points.push new Point [@stroke[best]], best, best, 'line'
+
+  find_lines: =>
+    result = []
+    @find_best_line 0, 1, result
+    @find_best_line @stroke.length - 1, -1, result
+    result
+
   extend: (point1, point2, base_length, length) =>
     if base_length > 0
       return {
@@ -266,9 +300,10 @@ class Stroke
     inflection_points = do @find_inflection_points
     cusps = @find_cusps inflection_points
     endpoints = do @find_endpoints
+    lines = do @find_lines
     loops = do @find_loops
     # Perform final post-processing on the points.
-    result = [].concat inflection_points, cusps, endpoints, loops
+    result = [].concat inflection_points, cusps, endpoints, lines, loops
     result.sort (point1, point2) -> point1.i - point2.i
     @deduplicate result
 
@@ -395,8 +430,8 @@ class @Feature extends Canvas
 
   run: (data) =>
     @data = data.slice 0
-    bounds = Util.bounds [].concat.apply [], data
-    @strokes = (new Stroke bounds, stroke for stroke in data)
+    bounds = Util.bounds [].concat.apply [], @data
+    @strokes = (new Stroke bounds, stroke for stroke in @data)
 
   serialize: =>
     data: @data
