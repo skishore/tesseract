@@ -36,6 +36,11 @@ class Point
   colors: {cusp: 'blue', loop: 'purple'}
   priorities: {cusp: 2, loop: 1}
 
+  # The minimum distance along the stroke two points can occur.
+  point_separation: 0.2
+  # A looser distance threshold needed to merge inflection points and loops.
+  inflection_loop_separation: 0.4
+
   constructor: (points, @i, @j, @type, @data) ->
     @x = (Util.sum (point.x for point in points))/points.length
     @y = (Util.sum (point.y for point in points))/points.length
@@ -45,6 +50,17 @@ class Point
   draw: (canvas) =>
     canvas.context.strokeStyle = @color
     canvas.draw_point @
+
+  distinct: (other, distance) =>
+    # Returns true if this point is distinct from the other point, given that
+    # the two points are `distance` units apart on the stroke.
+    min_separation = @point_separation
+    if @type == 'loop' and other.type == 'inflection' or
+        other.type == 'loop' and @type == 'inflection'
+      min_separation = @inflection_loop_separation
+    distance > min_separation or
+    (@type == 'endpoint' and other.type != 'loop') or
+    (other.type == 'endpoint' and @type != 'loop')
 
   majorizes: (other) =>
     if @priority != other.priority
@@ -96,9 +112,6 @@ class Stroke
   # How tolerant we are of unclosed loops at stroke endpoints. Set this
   # constant to 0 to ensure that all loops are complete.
   loop_tolerance: 0.2
-
-  # The minimum distance along the stroke two points can occur.
-  point_separation: 0.2
 
   constructor: (bounds, stroke) ->
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
@@ -239,9 +252,7 @@ class Stroke
       last_point = result[result.length - 1]
       # Check if point is separated from last_point. If so, just add it.
       if result.length == 0 or
-          (@cumulative_length last_point.j, point.i) > @point_separation or
-          (last_point.type == 'endpoint' and point.type != 'loop') or
-          (point.type == 'endpoint' and last_point.type != 'loop')
+          point.distinct last_point, (@cumulative_length last_point.j, point.i)
         result.push point
       else if point.majorizes last_point
         result[result.length - 1] = point
