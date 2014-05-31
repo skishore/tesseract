@@ -33,17 +33,17 @@ class @LinearRegression
 
 
 class Point
-  colors: {cusp: 'blue', dot: 'black', inflection: 'black', loop: 'purple'}
-  priorities: {cusp: 2, loop: 1, inflection: 0, dot: 0}
+  colors: {cusp: 'blue', loop: 'purple'}
+  priorities: {cusp: 2, loop: 1}
 
   constructor: (points, @i, @j, @type, @data) ->
     @x = (Util.sum (point.x for point in points))/points.length
     @y = (Util.sum (point.y for point in points))/points.length
-    @color = @colors[@type]
-    @priority = @priorities[@type]
+    @color = @colors[@type] or 'black'
+    @priority = @priorities[@type] or 0
 
   draw: (canvas) =>
-    canvas.context.strokeStyle = @colors[@type]
+    canvas.context.strokeStyle = @color
     canvas.draw_point @
 
   majorizes: (other) =>
@@ -98,7 +98,7 @@ class Stroke
   loop_tolerance: 0.2
 
   # The minimum distance along the stroke two points can occur.
-  minimum_point_separation: 0.2
+  point_separation: 0.2
 
   constructor: (bounds, stroke) ->
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
@@ -157,13 +157,14 @@ class Stroke
     for point in @points
       point.draw canvas
 
-  extend: (point1, point2, base_length, length) =>
-    if base_length > 0
-      return {
-        x: point2.x + length/base_length*(point2.x - point1.x)
-        y: point2.y + length/base_length*(point2.y - point1.y)
-      }
-    point2
+  find_inflection_points: =>
+    # Find any inflection points within this stroke. Return a list of points.
+    result = []
+    for state, i in @states
+      if i < @stroke.length - 1 and state != @states[i + 1]
+        j = i + 1
+        result.push new Point [@stroke[i], @stroke[j]], i, j, 'inflection'
+    result
 
   check_cusp_point: (i, params, points) =>
     {adjustment, range, tolerance} = params
@@ -195,14 +196,17 @@ class Stroke
         i += 1
     result
 
-  find_inflection_points: =>
-    # Find any inflection points within this stroke. Return a list of points.
-    result = []
-    for state, i in @states
-      if i < @stroke.length - 1 and state != @states[i + 1]
-        j = i + 1
-        result.push new Point [@stroke[i], @stroke[j]], i, j, 'inflection'
-    result
+  find_endpoints: =>
+    indices = [0, @stroke.length - 1]
+    (new Point [@stroke[i]], i, i, 'endpoint' for i in indices)
+
+  extend: (point1, point2, base_length, length) =>
+    if base_length > 0
+      return {
+        x: point2.x + length/base_length*(point2.x - point1.x)
+        y: point2.y + length/base_length*(point2.y - point1.y)
+      }
+    point2
 
   get_stroke_intersection: (i, j) =>
     # Return the intersection between the segments (stroke[i], stroke[i + 1])
@@ -233,8 +237,11 @@ class Stroke
     result = []
     for point in points
       last_point = result[result.length - 1]
+      # Check if point is separated from last_point. If so, just add it.
       if result.length == 0 or
-          (@cumulative_length last_point.j, point.i) > @minimum_point_separation
+          (@cumulative_length last_point.j, point.i) > @point_separation or
+          (last_point.type == 'endpoint' and point.type != 'loop') or
+          (point.type == 'endpoint' and last_point.type != 'loop')
         result.push point
       else if point.majorizes last_point
         result[result.length - 1] = point
@@ -247,9 +254,10 @@ class Stroke
     # Get the list of points of different types.
     inflection_points = do @find_inflection_points
     cusps = @find_cusps inflection_points
+    endpoints = do @find_endpoints
     loops = do @find_loops
     # Perform final post-processing on the points.
-    result = [].concat inflection_points, cusps, loops
+    result = [].concat inflection_points, cusps, endpoints, loops
     result.sort (point1, point2) -> point1.i - point2.i
     @deduplicate result
 
