@@ -32,42 +32,10 @@ class @LinearRegression
     @covariance/Math.sqrt @variance.x*@variance.y
 
 
-class Segment
-  length_threshold: 0.25
-
-  constructor: (@stroke, @state, @i, @j, @dot) ->
-    @bounds = Util.bounds @stroke.slice @i, @j
-    @dot = if dot then true else false
-    @color = do @get_color
-
-  draw: (canvas) =>
-    if not @dot
-      canvas.context.strokeStyle = @color
-      for k in [@i...@j]
-        canvas.point_width /= 2
-        canvas.draw_point @stroke[k]
-        canvas.point_width *= 2
-
-  get_color: =>
-    return {0: '#000', 1: '#C00', 2: '#080'}[@state]
-
-  serialize: =>
-    bounds: @bounds
-    count: @j - @i
-    start: Util.rescale @bounds, @stroke[@i]
-    end:  Util.rescale @bounds, @stroke[@j - 1]
-    state: @state
-    dot: @dot
-    # Deprecated signals.
-    length: 0
-    closed: false
-    minor: false
-
-
 class Point
   colors: {cusp: 'blue', dot: 'black', inflection: 'black', loop: 'purple'}
 
-  constructor: (points, @i, @type, @data) ->
+  constructor: (points, @i, @j, @type, @data) ->
     @x = (Util.sum (point.x for point in points))/points.length
     @y = (Util.sum (point.y for point in points))/points.length
 
@@ -77,6 +45,8 @@ class Point
 
 
 class Stroke
+  colors: {0: 'black', 1: '#C00', 2: '#080'}
+
   # The initial number of smoothing iterations applied to the stroke.
   stroke_smoothing: 3
   # Thresholds for marking a stroke as a dot.
@@ -119,12 +89,11 @@ class Stroke
   constructor: (bounds, stroke) ->
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
     @initialize (Util.rescale bounds, point for point in stroke)
-    if do @check_size
-      @states = @postprocess do @run_viterbi
-      @segments = @segment @stroke, @states
-    else
+    @dot = not do @check_size
+    if @dot
       @states = (0 for point in @stroke)
-      @segments = [new Segment @stroke, @states, 0, @stroke.length, true]
+    else
+      @states = @postprocess do @run_viterbi
     @points = do @find_points
 
   initialize: (@stroke) =>
@@ -163,8 +132,14 @@ class Stroke
     )
 
   draw: (canvas) =>
-    for segment in @segments
-      segment.draw canvas
+    # Draw the stroke points, colored based on their state.
+    if not @dot
+      canvas.point_width /= 2
+      for point, i in @stroke
+        canvas.context.strokeStyle = @colors[@states[i]]
+        canvas.draw_point point
+      canvas.point_width *= 2
+    # Draw the feature points. Rendering is controlled by the Point class.
     for point in @points
       point.draw canvas
 
@@ -185,7 +160,7 @@ class Stroke
     diff = Util.angle_diff angle1, angle2
     if (Math.abs diff) < tolerance
       base_confidence = (1 - (Math.abs diff)/tolerance)/range
-      points.push new Point [@stroke[i]], i, 'cusp',
+      points.push new Point [@stroke[i]], i, i, 'cusp',
         confidence: adjustment*base_confidence
 
   deduplicate: (points) =>
@@ -198,25 +173,33 @@ class Stroke
         result[result.length - 1] = point
     result
 
-  find_cusps: =>
+  find_cusps: (inflection_points) =>
     # Find any cusps within this stroke. Return a list of points.
     points = []
     for i in [0...@stroke.length]
       @check_cusp_point i, @high_confidence_cusp, points
-    for segment in @segments
-      if segment.i > 0
-        for k in [segment.i...segment.j]
-          @check_cusp_point k, @low_confidence_cusp, points
-          length += (@lengths[k + 1]? or @lengths[k]) - @lengths[k]
-          if (@cumulative_length segment.i, k) > @inflection_cusp_distance
-            break
-      if segment.j < @stroke.length
-        for k in [segment.j - 1..segment.i]
-          @check_cusp_point k, @low_confidence_cusp, points
-          if (@cumulative_length k, segment.j - 1) > @inflection_cusp_distance
-            break
+    for inflection_point in inflection_points
+      i = inflection_point.i
+      while i >= 0 and
+          (@cumulative_length i, inflection_point.i) < @inflection_cusp_distance
+        @check_cusp_point i, @low_confidence_cusp, points
+        i -= 1
+      i = inflection_point.j
+      while i < @stroke.length and
+          (@cumulative_length inflection_point.j, i) < @inflection_cusp_distance
+        @check_cusp_point i, @low_confidence_cusp, points
+        i += 1
     points.sort (point1, point2) -> point1.i - point2.i
     @deduplicate points
+
+  find_inflection_points: =>
+    # Find any inflection points within this stroke. Return a list of points.
+    result = []
+    for state, i in @states
+      if i < @stroke.length - 1 and state != @states[i + 1]
+        j = i + 1
+        result.push new Point [@stroke[i], @stroke[j]], i, j, 'inflection'
+    result
 
   get_stroke_intersection: (i, j) =>
     # Return the intersection between the segments (stroke[i], stroke[i + 1])
@@ -239,19 +222,18 @@ class Stroke
           break
         [u, v, point] = @get_stroke_intersection i, i + j - 1
         if point and 0 <= u < 1 and 0 <= v < 1
-          loops.push new Point [point], i, 'loop'
-          loops.push new Point [point], i + j, 'loop'
+          loops.push new Point [point], i, i + j, 'loop'
       i += 1
     loops
 
   find_points: =>
     # Return a list of all dot, cusp, or loop points within the stroke.
-    if @segments.length == 1 and @segments[0].dot
-      return [new Point @segments[0].bounds, 0, 'dot']
-    result = []
-    Array::push.apply result, do @find_cusps
-    Array::push.apply result, do @find_loops
-    result
+    if @dot
+      return [new Point @bounds, 0, @stroke.length, 'dot']
+    inflection_points = do @find_inflection_points
+    cusps = @find_cusps inflection_points
+    loops = do @find_loops
+    [].concat inflection_points, cusps, loops
 
   postprocess: (states) =>
     # Takes an (n - 2)-element list of states and extends it to a list of n
@@ -276,16 +258,6 @@ class Stroke
       for j in [size - 1...i]
         states[j] = states[i]
     states
-
-  segment: (stroke, states) =>
-    # Returns the list of segments based on on state data.
-    result = []
-    for state, i in states
-      if result.length and state == states[result[result.length - 1][0]]
-        result[result.length - 1][1] = i + 1
-      else
-        result.push [i, i + 1]
-    ((new Segment stroke, states[i], i, j, false) for [i, j] in result)
 
   handle_180s: (angles) =>
     # If an angle is sufficiently close to 180 degrees, and if it is the same
@@ -345,7 +317,7 @@ class Stroke
     result
 
   serialize: =>
-    (do segment.serialize for segment in @segments)
+    []
 
 
 class @Feature extends Canvas
