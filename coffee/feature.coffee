@@ -103,10 +103,15 @@ class Stroke
   # for high-confidence cusps, while only the regions near inflection points
   # are scanned for low-confidence cusps.
   high_confidence_cusp: {adjustment: 1, range: 2, tolerance: 0.4*Math.PI}
-  low_confidence_cusp: {adjustment: 0.5, range: 4, tolerance: 0.6*Math.PI}
+  low_confidence_cusp: {adjustment: 0.2, range: 4, tolerance: 0.6*Math.PI}
+  # The maximum distance from a low-confidence cusp to an inflection point.
+  inflection_cusp_distance: 0.05
 
   # The maximum number of stroke points in a loop.
   loop_count: 80
+  # If the loop size is this fraction of the total stroke size, it is not
+  # counted as a loop - instead, the entire stroke is counted as closed.
+  loop_length_ratio: 0.8
   # How tolerant we are of unclosed loops at stroke endpoints. Set this
   # constant to 0 to ensure that all loops are complete.
   loop_tolerance: 0.2
@@ -116,11 +121,9 @@ class Stroke
     @initialize (Util.rescale bounds, point for point in stroke)
     if do @check_size
       @states = @postprocess do @run_viterbi
-      @loops = @find_loops @stroke, @states
       @segments = @segment @stroke, @states
     else
       @states = (0 for point in @stroke)
-      @loops = []
       @segments = [new Segment @stroke, @states, 0, @stroke.length, true]
     @points = do @find_points
 
@@ -162,10 +165,6 @@ class Stroke
   draw: (canvas) =>
     for segment in @segments
       segment.draw canvas
-    for [i, j] in @loops
-      canvas.context.strokeStyle = 'purple'
-      canvas.draw_point @stroke[i]
-      canvas.draw_point @stroke[j - 1]
     for point in @points
       point.draw canvas
 
@@ -176,30 +175,6 @@ class Stroke
         y: point2.y + length/base_length*(point2.y - point1.y)
       }
     point2
-
-  find_loops: =>
-    # Find any loops within this stroke. Return a list of intervals [i, j).
-    loops = []
-    i = 0
-    while i < @stroke.length
-      for j in [3...@loop_count]
-        if i + j >= @stroke.length
-          break
-        [u, v, point] = @find_stroke_intersection i, i + j - 1
-        if point and 0 <= u < 1 and 0 <= v < 1
-          loops.push [i, i + j + 1]
-      i += 1
-    loops
-
-  find_stroke_intersection: (i, j) =>
-    # Return the intersection between the segments (stroke[i], stroke[i + 1])
-    # and (stroke[j], stroke[j + 1]).
-    [p1, p2, p3, p4] = [@stroke[i], @stroke[i + 1], @stroke[j], @stroke[j + 1]]
-    if i == 0
-      p1 = @extend p2, p1, (@length i), @loop_tolerance
-    if j + 2 == @stroke.length
-      p4 = @extend p3, p4, (@length j), @loop_tolerance
-    Util.intersection p1, p2, p3, p4
 
   check_cusp_point: (i, params, points) =>
     {adjustment, range, tolerance} = params
@@ -224,6 +199,7 @@ class Stroke
     result
 
   find_cusps: =>
+    # Find any cusps within this stroke. Return a list of points.
     points = []
     for i in [0...@stroke.length]
       @check_cusp_point i, @high_confidence_cusp, points
@@ -232,20 +208,50 @@ class Stroke
         for k in [segment.i...segment.j]
           @check_cusp_point k, @low_confidence_cusp, points
           length += (@lengths[k + 1]? or @lengths[k]) - @lengths[k]
-          if (@cumulative_length segment.i, k) > 0.05
+          if (@cumulative_length segment.i, k) > @inflection_cusp_distance
             break
       if segment.j < @stroke.length
         for k in [segment.j - 1..segment.i]
           @check_cusp_point k, @low_confidence_cusp, points
-          if (@cumulative_length k, segment.j - 1) > 0.05
+          if (@cumulative_length k, segment.j - 1) > @inflection_cusp_distance
             break
     points.sort (point1, point2) -> point1.i - point2.i
     @deduplicate points
 
+  get_stroke_intersection: (i, j) =>
+    # Return the intersection between the segments (stroke[i], stroke[i + 1])
+    # and (stroke[j], stroke[j + 1]).
+    [p1, p2, p3, p4] = [@stroke[i], @stroke[i + 1], @stroke[j], @stroke[j + 1]]
+    if i == 0
+      p1 = @extend p2, p1, (@length i), @loop_tolerance
+    if j + 2 == @stroke.length
+      p4 = @extend p3, p4, (@length j), @loop_tolerance
+    Util.intersection p1, p2, p3, p4
+
+  find_loops: =>
+    # Find any loops within this stroke. Return a list of points.
+    loops = []
+    i = 0
+    max_length = @loop_length_ratio*@lengths[@stroke.length - 1]
+    while i < @stroke.length
+      for j in [3...@loop_count]
+        if i + j >= @stroke.length or (@cumulative_length i, i + j) > max_length
+          break
+        [u, v, point] = @get_stroke_intersection i, i + j - 1
+        if point and 0 <= u < 1 and 0 <= v < 1
+          loops.push new Point [point], i, 'loop'
+          loops.push new Point [point], i + j, 'loop'
+      i += 1
+    loops
+
   find_points: =>
+    # Return a list of all dot, cusp, or loop points within the stroke.
     if @segments.length == 1 and @segments[0].dot
       return [new Point @segments[0].bounds, 0, 'dot']
-    return do @find_cusps
+    result = []
+    Array::push.apply result, do @find_cusps
+    Array::push.apply result, do @find_loops
+    result
 
   postprocess: (states) =>
     # Takes an (n - 2)-element list of states and extends it to a list of n
