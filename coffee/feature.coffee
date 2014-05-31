@@ -34,14 +34,25 @@ class @LinearRegression
 
 class Point
   colors: {cusp: 'blue', dot: 'black', inflection: 'black', loop: 'purple'}
+  priorities: {cusp: 2, loop: 1, inflection: 0, dot: 0}
 
   constructor: (points, @i, @j, @type, @data) ->
     @x = (Util.sum (point.x for point in points))/points.length
     @y = (Util.sum (point.y for point in points))/points.length
+    @color = @colors[@type]
+    @priority = @priorities[@type]
 
   draw: (canvas) =>
     canvas.context.strokeStyle = @colors[@type]
     canvas.draw_point @
+
+  majorizes: (other) =>
+    if @priority != other.priority
+      return @priority > other.priority
+    if @type == 'cusp'
+      return @data.confidence > other.data.confidence
+    if @type == 'loop'
+      return @j - @i > other.j - other.i
 
 
 class Stroke
@@ -72,8 +83,8 @@ class Stroke
   # `tolerance` radians of making a full-pi turn. The entire stroke is scanned
   # for high-confidence cusps, while only the regions near inflection points
   # are scanned for low-confidence cusps.
-  high_confidence_cusp: {adjustment: 1, range: 2, tolerance: 0.4*Math.PI}
-  low_confidence_cusp: {adjustment: 0.2, range: 4, tolerance: 0.6*Math.PI}
+  high_confidence_cusp: {adjustment: 1.5, range: 2, tolerance: 0.4*Math.PI}
+  low_confidence_cusp: {adjustment: 1, range: 4, tolerance: 0.6*Math.PI}
   # The maximum distance from a low-confidence cusp to an inflection point.
   inflection_cusp_distance: 0.05
 
@@ -85,6 +96,9 @@ class Stroke
   # How tolerant we are of unclosed loops at stroke endpoints. Set this
   # constant to 0 to ensure that all loops are complete.
   loop_tolerance: 0.2
+
+  # The minimum distance along the stroke two points can occur.
+  minimum_point_separation: 0.2
 
   constructor: (bounds, stroke) ->
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
@@ -159,38 +173,27 @@ class Stroke
     angle2 = @angles[i + range - 1] - Math.PI
     diff = Util.angle_diff angle1, angle2
     if (Math.abs diff) < tolerance
-      base_confidence = (1 - (Math.abs diff)/tolerance)/range
+      base_confidence = 1 - (Math.abs diff)/tolerance
       points.push new Point [@stroke[i]], i, i, 'cusp',
         confidence: adjustment*base_confidence
 
-  deduplicate: (points) =>
-    result = []
-    r = 8
-    for point in points
-      if result.length == 0 or point.i > result[result.length - 1].i + r
-        result.push point
-      else if point.data.confidence > result[result.length - 1].data.confidence
-        result[result.length - 1] = point
-    result
-
   find_cusps: (inflection_points) =>
     # Find any cusps within this stroke. Return a list of points.
-    points = []
+    result = []
     for i in [0...@stroke.length]
-      @check_cusp_point i, @high_confidence_cusp, points
+      @check_cusp_point i, @high_confidence_cusp, result
     for inflection_point in inflection_points
       i = inflection_point.i
       while i >= 0 and
           (@cumulative_length i, inflection_point.i) < @inflection_cusp_distance
-        @check_cusp_point i, @low_confidence_cusp, points
+        @check_cusp_point i, @low_confidence_cusp, result
         i -= 1
       i = inflection_point.j
       while i < @stroke.length and
           (@cumulative_length inflection_point.j, i) < @inflection_cusp_distance
-        @check_cusp_point i, @low_confidence_cusp, points
+        @check_cusp_point i, @low_confidence_cusp, result
         i += 1
-    points.sort (point1, point2) -> point1.i - point2.i
-    @deduplicate points
+    result
 
   find_inflection_points: =>
     # Find any inflection points within this stroke. Return a list of points.
@@ -213,7 +216,7 @@ class Stroke
 
   find_loops: =>
     # Find any loops within this stroke. Return a list of points.
-    loops = []
+    result = []
     i = 0
     max_length = @loop_length_ratio*@lengths[@stroke.length - 1]
     while i < @stroke.length
@@ -222,18 +225,33 @@ class Stroke
           break
         [u, v, point] = @get_stroke_intersection i, i + j - 1
         if point and 0 <= u < 1 and 0 <= v < 1
-          loops.push new Point [point], i, i + j, 'loop'
+          result.push new Point [point], i, i + j, 'loop'
       i += 1
-    loops
+    result
+
+  deduplicate: (points) =>
+    result = []
+    for point in points
+      last_point = result[result.length - 1]
+      if result.length == 0 or
+          (@cumulative_length last_point.j, point.i) > @minimum_point_separation
+        result.push point
+      else if point.majorizes last_point
+        result[result.length - 1] = point
+    result
 
   find_points: =>
     # Return a list of all dot, cusp, or loop points within the stroke.
     if @dot
       return [new Point @bounds, 0, @stroke.length, 'dot']
+    # Get the list of points of different types.
     inflection_points = do @find_inflection_points
     cusps = @find_cusps inflection_points
     loops = do @find_loops
-    [].concat inflection_points, cusps, loops
+    # Perform final post-processing on the points.
+    result = [].concat inflection_points, cusps, loops
+    result.sort (point1, point2) -> point1.i - point2.i
+    @deduplicate result
 
   postprocess: (states) =>
     # Takes an (n - 2)-element list of states and extends it to a list of n
