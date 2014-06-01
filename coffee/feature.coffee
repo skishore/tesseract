@@ -52,7 +52,7 @@ class Point
     base: 0.2
     # Endpoints should generally not be merged with other points, but a small
     # trailing segment can hang off the end of a loop.
-    endpoint: {base: 0, loop: 0.16}
+    endpoint: {base: 0, loop: 0.1}
     # Inflection points should be merged with loops whenever possible.
     inflection: {base: 0.2, loop: 0.4}
   }
@@ -77,6 +77,8 @@ class Point
       if type2 of @point_separation[type1]
         return @point_separation[type1][type2]
       return @point_separation[type1].base
+    if type2 of @point_separation
+      return @point_separation[type2].base
     @point_separation.base
 
   distinct: (other, distance) =>
