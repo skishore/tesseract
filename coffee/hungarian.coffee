@@ -122,3 +122,6 @@ class @Hungarian
         slack[y] -= delta
       else
         @y_label[y] += delta
+
+  get_final_score: (original_matrix) =>
+    Util.sum (original_matrix[x][@x_match[x]] for x in @range)

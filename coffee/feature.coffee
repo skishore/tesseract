@@ -36,7 +36,13 @@ class LinearRegression
 
 
 class Point
-  colors: {cusp: 'blue', loop: 'purple', line: 'red'}
+  colors: {
+    cusp: 'blue'
+    loop: '#0A0'
+    line: '#F00'
+    inflection: '#C0C'
+    dot: '#088'
+  }
   priorities: {cusp: 3, loop: 2, line: 1}
 
   # Dictionary containing the minimum distance between points of two types.
@@ -58,8 +64,9 @@ class Point
     @priority = @priorities[@type] or 0
 
   draw: (canvas) =>
-    canvas.context.strokeStyle = @color
-    canvas.draw_point @
+    if @type != 'closure'
+      canvas.context.strokeStyle = @color
+      canvas.draw_point @
 
   get_separation: (type1, type2) =>
     # Swap so that we access the dictionary with the alphabetically-first type.
@@ -84,6 +91,9 @@ class Point
       return @data.confidence > other.data.confidence
     if @type == 'loop'
       return @j - @i > other.j - other.i
+
+  serialize: =>
+    {x: @x, y: @y, type: @type}
 
 
 class Stroke
@@ -133,15 +143,26 @@ class Stroke
   # constant to 0 to ensure that all loops are complete.
   loop_tolerance: 0.2
 
+  # Tolerances for declaring that the stroke closes in on itself: the angle
+  # between the first and last points must be < 90 degrees, and the distance
+  # between the two points must be less than the length tolerance.
+  closure_angle_tolerance: 0.5*Math.PI
+  closure_length_tolerance: 0.1
+
   constructor: (bounds, stroke) ->
     stroke = Util.smooth_stroke stroke, @stroke_smoothing
     @initialize (Util.rescale bounds, point for point in stroke)
     @dot = not do @check_size
     if @dot
       @states = (0 for point in @stroke)
+      @points = [new Point @bounds, 0, @stroke.length, 'dot']
+      @closed = false
+      @edges = []
     else
       @states = @postprocess do @run_viterbi
-    @points = do @find_points
+      @points = do @find_points
+      @closed = do @check_closure
+      @edges = do @recover_edges
 
   initialize: (@stroke) =>
     # Set up basic data structures:
@@ -178,14 +199,22 @@ class Stroke
       (Util.perimeter @bounds[0], @bounds[1]) > @perimeter_threshold
     )
 
-  draw: (canvas) =>
-    # Draw the stroke points, colored based on their state.
-    if not @dot
-      canvas.point_width /= 2
+  draw: (canvas, draw_all_points) =>
+    [canvas.point_width, old_width] = [1.2, canvas.point_width]
+    if draw_all_points and not @dot
+      # Draw the stroke points, colored based on their state.
       for point, i in @stroke
         canvas.context.strokeStyle = @colors[@states[i]]
         canvas.draw_point point
-      canvas.point_width *= 2
+    else if not draw_all_points
+      # Only draw in points that come from edges.
+      for edge in @edges
+        canvas.context.strokeStyle = 'black'
+        if edge.i < 0 or (@points.length == 1 and @points[0].type == 'closure')
+          canvas.context.strokeStyle = '#F40'
+        for i in [edge.i..edge.j]
+          canvas.draw_point @stroke[(i + @stroke.length) % @stroke.length]
+    canvas.point_width = old_width
     # Draw the feature points. Rendering is controlled by the Point class.
     for point in @points
       point.draw canvas
@@ -300,9 +329,6 @@ class Stroke
     result
 
   find_points: =>
-    # Return a list of all dot, cusp, or loop points within the stroke.
-    if @dot
-      return [new Point @bounds, 0, @stroke.length, 'dot']
     # Get the list of points of different types.
     inflection_points = do @find_inflection_points
     cusps = @find_cusps inflection_points
@@ -313,6 +339,37 @@ class Stroke
     result = [].concat inflection_points, cusps, endpoints, lines, loops
     result.sort (point1, point2) -> point1.i - point2.i
     @deduplicate result
+
+  check_closure: =>
+    if @points.length >= 2 and
+        @points[0].type == 'endpoint' and
+        @points[@points.length - 1].type == 'endpoint'
+      diff = Util.angle_diff @angles[0], @angles[@angles.length - 1]
+      if (Math.abs diff) < @closure_angle_tolerance
+        distance = Util.distance @stroke[0], @stroke[@stroke.length - 1]
+        if distance < @closure_length_tolerance*@lengths[@lengths.length - 1]
+          @points = @points.slice 1, @points.length - 1
+          if @points.length == 0
+            @points.push new Point @bounds, 0, @stroke.length, 'closure',
+                bounds: @bounds
+          return true
+    false
+
+  recover_edges: =>
+    result = []
+    for point, i in @points
+      if point.j - point.i > 1
+        result.push {i: point.i + 1, j: point.j - 1, from: i, to: i}
+      if i > 0
+        result.push {i: @points[i - 1].j, j: point.i, from: i - 1, to: i}
+      else if @closed
+        result.push {
+          i: @points[@points.length - 1].j - @stroke.length
+          j: point.i
+          from: i
+          to: @points.length - 1
+        }
+    result
 
   postprocess: (states) =>
     # Takes an (n - 2)-element list of states and extends it to a list of n
@@ -396,7 +453,8 @@ class Stroke
     result
 
   serialize: =>
-    []
+    # TODO(skishore): Include information about edges as well.
+    points: (do point.serialize for point in @points)
 
 
 class @Feature extends Canvas
