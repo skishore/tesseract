@@ -60,6 +60,18 @@ class @Classifier
     (hungarian.get_final_score matrix)/sample_points.length
 
   score_points: (a, b) =>
+    # TODO(skishore): This scoring function is incredibly naive and has not
+    # been tuned. Possible changes:
+    #   - Increase or decrease the missing_sample_point_penalty - what happens?
+    #   - Add in a worst-case missing_test_point_penalty. This would allow test
+    #     points to not match at all if there are no good matches. This penalty
+    #     might depend on the test point type - for example, extra cusps might
+    #     not matter too much.
+    #   - Increase the distance penalty...
+    #   - Change the type-mismatch penalty to be a function of the two types.
+    #     In particular, dots should probably not match with non-dots, while
+    #     cusps, lines, and endpoints can all match eachother without trouble.
+    # Also, as seen on the u and uu characters, cusps over-trigger on mobile...
     distance_penalty = -1.0
     type_mismatch_penalty = -0.5
 
