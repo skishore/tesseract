@@ -44,10 +44,17 @@ class Point
   colors: {cusp: 'blue', loop: 'purple', line: 'red'}
   priorities: {cusp: 3, loop: 2, line: 1}
 
-  # The minimum distance along the stroke two points can occur.
-  point_separation: 0.2
-  # A looser distance threshold needed to merge inflection points and loops.
-  inflection_loop_separation: 0.4
+  # Dictionary containing the minimum distance between points of two types.
+  # This dictionary should be accessed using the alphabetically-first type as
+  # the first key - see get_separation for an implementation.
+  point_separation: {
+    base: 0.2
+    # Endpoints should generally not be merged with other points, but a small
+    # trailing segment can hang off the end of a loop.
+    endpoint: {base: 0, loop: 0.16}
+    # Inflection points should be merged with loops whenever possible.
+    inflection: {base: 0.2, loop: 0.4}
+  }
 
   constructor: (points, @i, @j, @type, @data) ->
     @x = (Util.sum (point.x for point in points))/points.length
@@ -59,16 +66,21 @@ class Point
     canvas.context.strokeStyle = @color
     canvas.draw_point @
 
+  get_separation: (type1, type2) =>
+    # Swap so that we access the dictionary with the alphabetically-first type.
+    if type2 < type1
+      [type1, type2] = [type2, type1]
+    # Look up [type1, type2], falling back to base values if either is missing.
+    if type1 of @point_separation
+      if type2 of @point_separation[type1]
+        return @point_separation[type1][type2]
+      return @point_separation[type1].base
+    @point_separation.base
+
   distinct: (other, distance) =>
     # Returns true if this point is distinct from the other point, given that
     # the two points are `distance` units apart on the stroke.
-    min_separation = @point_separation
-    if @type == 'loop' and other.type == 'inflection' or
-        other.type == 'loop' and @type == 'inflection'
-      min_separation = @inflection_loop_separation
-    distance > min_separation or
-    (@type == 'endpoint' and other.type != 'loop') or
-    (other.type == 'endpoint' and @type != 'loop')
+    distance > @get_separation @type, other.type
 
   majorizes: (other) =>
     if @priority != other.priority
