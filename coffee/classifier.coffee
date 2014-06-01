@@ -27,7 +27,8 @@ class @Classifier
     result
 
   score: (sample, test) =>
-    missing_sample_point_penalty = -1.0
+    missing_sample_point_penalty = -2.0
+    missing_test_point_penalty = -1.0
 
     sample_points = @extract_points sample
     test_points = @extract_points test
@@ -35,7 +36,7 @@ class @Classifier
       return -Infinity
 
     matrix = []
-    best_match = ([-1, -Infinity] for test_point in test_points)
+    best_match = ([-1, missing_test_point_penalty] for _ in test_points)
     # Score all major sample segments. Note that a sample segment can match
     # with a minor test segment, because the test data is noisy.
     for sample_point, i in sample_points
@@ -63,19 +64,20 @@ class @Classifier
     # TODO(skishore): This scoring function is incredibly naive and has not
     # been tuned. Possible changes:
     #   - Increase or decrease the missing_sample_point_penalty - what happens?
-    #   - Add in a worst-case missing_test_point_penalty. This would allow test
-    #     points to not match at all if there are no good matches. This penalty
-    #     might depend on the test point type - for example, extra cusps might
-    #     not matter too much.
-    #   - Increase the distance penalty...
+    #   - Make the missing_test_point_penalty depend on point type.
+    #   - Increase the distance penalty.
     #   - Change the type-mismatch penalty to be a function of the two types.
     #     In particular, dots should probably not match with non-dots, while
     #     cusps, lines, and endpoints can all match eachother without trouble.
     # Also, as seen on the u and uu characters, cusps over-trigger on mobile...
-    distance_penalty = -1.0
-    type_mismatch_penalty = -0.5
+    # This can be ameliorated by having a low penalty for unmatched test cusps.
+    distance_penalty = -10.0
+    type_mismatch_penalty = -10.0
 
-    score = distance_penalty*Util.distance a, b
+    score = distance_penalty*((@square_diff a.x, b.x) + (@square_diff a.y, b.y))
     if a.type != b.type
       score += type_mismatch_penalty
     score
+
+  square_diff: (x, y) =>
+    (x - y)*(x - y)

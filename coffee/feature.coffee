@@ -276,7 +276,6 @@ class Stroke
           best = j
       j += step
     if best != i
-      points.push new Point [@stroke[i]], i, i, 'line'
       points.push new Point [@stroke[best]], best, best, 'line'
 
   find_lines: =>
