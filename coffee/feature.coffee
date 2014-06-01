@@ -23,13 +23,8 @@ class LinearRegression
     diff = {x: point2.x - point1.x, y: point2.y - point1.y}
     if not @normalize diff
       return Infinity
-    [a, b, c] = [diff.y, -diff.x, diff.y*point1.x - diff.x*point1.y]
-    # TODO(skishore): Choose c that minimizes this polynomial instead
-    # of basing it on the dot product with point1.
-    result =
-      a*a*@square_sum.x + b*b*@square_sum.y + c*c*@n +
-      2*(a*b*@sum_xy - a*c*@sum.x - b*c*@sum.y)
-    result/@n
+    [a, b, r] = [diff.y, -diff.x, diff.y*@sum.x - diff.x*@sum.y]
+    (a*a*@square_sum.x + b*b*@square_sum.y + 2*a*b*@sum_xy - r*r/@n)/@n
 
   normalize: (point) =>
     length = Math.sqrt point.x*point.x + point.y*point.y
