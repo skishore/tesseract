@@ -8,6 +8,7 @@ DB="tesseract.db"
 PEM="$HOME/Dropbox/Public/gnome.pem"
 EC2="ubuntu@ec2-54-85-142-145.compute-1.amazonaws.com"
 
+SCREEN_SESSION="tesseract"
 
 if [ $USER == skishore ]
   then
@@ -24,7 +25,10 @@ if [ $USER == skishore ]
     sass --update scss:static/css
 
     # Kill and reboot the screened server.
-    killall -g screen
-    screen -S server.py -d -m python server.py 
+    pid=$(screen -list | grep $SCREEN_SESSION | cut -d '.' -f 1 | bc)
+    if [ -n "$pid" ]; then
+      screen -X -S $pid quit
+    fi
+    screen -S $SCREEN_SESSION -d -m python server.py
     echo "Done!"
 fi
