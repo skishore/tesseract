@@ -1,0 +1,82 @@
+body {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  margin: 2%;
+  text-align: center; }
+  body .wrapper {
+    background-color: #EEE;
+    display: block;
+    margin: 0 auto;
+    position: relative;
+    width: 20%; }
+    body .wrapper .inner {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      top: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 2.4em;
+      overflow: hidden;
+      vertical-align: middle; }
+    body .wrapper:after {
+      content: '';
+      display: block;
+      padding-top: 25%; }
+  body .square.wrapper {
+    background-color: white;
+    z-index: -2; }
+    body .square.wrapper .hint {
+      color: #DDD;
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      top: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.6em;
+      z-index: -1; }
+    body .square.wrapper:after {
+      padding-top: 75%; }
+  body .ocr-result-container div {
+    display: inline-block; }
+  body .inner.controls {
+    line-height: 1.8em; }
+    body .inner.controls .reset, body .inner.controls .prev, body .inner.controls .next {
+      cursor: pointer;
+      float: left;
+      user-select: none; }
+    body .inner.controls .reset {
+      background-color: #FCC;
+      width: 34%; }
+    body .inner.controls .prev, body .inner.controls .next {
+      background-color: #CEF;
+      width: 33%; }
+  body .buffer {
+    display: none;
+    height: 256px;
+    width: 256px; }
+  body .classification {
+    height: 130px; }
+    body .classification .train, body .classification .test {
+      background-color: #CFC;
+      cursor: pointer;
+      float: left;
+      height: 130px;
+      line-height: 130px;
+      user-select: none; }
+    body .classification .feature {
+      border: 1px dotted black;
+      float: left;
+      height: 128px;
+      margin: 0 auto;
+      width: 128px; }
+
+@media only screen and (max-device-width: 768px) {
+  body {
+    margin: 4% 0%; }
+    body .wrapper {
+      width: 100%; } }
